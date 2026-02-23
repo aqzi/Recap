@@ -1,11 +1,12 @@
 import os
 
-from prompts import format_timestamp
+from core.prompts import format_timestamp
 
 
-def write_transcript(segments: list[dict], output_dir: str) -> str:
+def write_transcript(segments: list[dict], output_dir: str, content_type: str = "meeting") -> str:
+    label = content_type.capitalize()
     path = os.path.join(output_dir, "transcript.md")
-    lines = ["# Meeting Transcript\n"]
+    lines = [f"# {label} Transcript\n"]
     for seg in segments:
         ts = format_timestamp(seg["start"])
         lines.append(f"**[{ts}]** {seg['text']}\n")
@@ -21,8 +22,11 @@ def write_summary(summary_text: str, output_dir: str) -> str:
     return path
 
 
-def write_remarks(remarks_text: str, output_dir: str) -> str:
+def write_remarks(remarks_text: str, output_dir: str, score_block: str | None = None) -> str:
     path = os.path.join(output_dir, "remarks.md")
     with open(path, "w", encoding="utf-8") as f:
+        if score_block:
+            f.write(score_block)
+            f.write("\n\n---\n\n")
         f.write(remarks_text)
     return path

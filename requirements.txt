@@ -2,3 +2,4 @@ faster-whisper
 ollama
 click
 rich
+yt-dlp
