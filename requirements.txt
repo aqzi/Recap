@@ -3,3 +3,11 @@ ollama
 click
 rich
 yt-dlp
+feedparser
+trafilatura
+piper-tts
+pathvalidate
+pydub
+pyyaml
+ddgs
+*.onnx

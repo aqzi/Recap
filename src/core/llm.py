@@ -2,14 +2,22 @@ import time
 
 import ollama
 
+import json
+
 from core.prompts import (
+    ARTICLE_RANKING_SYSTEM,
+    SOLO_SCRIPT_SYSTEM,
+    TWO_HOST_SCRIPT_SYSTEM,
     YOUTUBE_SCORE_SYSTEM,
+    article_ranking_prompt,
     chunk_summary_prompt,
     chunk_summary_system,
     consolidation_prompt,
     consolidation_system,
     remarks_prompt,
     remarks_system,
+    solo_script_prompt,
+    two_host_script_prompt,
     youtube_score_prompt,
 )
 
@@ -68,3 +76,38 @@ def generate_remarks(
 def generate_watch_score(consolidated_summary: str, llm_model: str, user_interests: str | None = None) -> str:
     prompt = youtube_score_prompt(consolidated_summary, user_interests)
     return call_llm(prompt, YOUTUBE_SCORE_SYSTEM, llm_model)
+
+
+# --- Podcast functions ---
+
+def rank_articles(
+    articles: list[dict], interests: str, max_articles: int, llm_model: str,
+) -> list[int]:
+    """Return indices of the most relevant articles, ordered by relevance."""
+    prompt = article_ranking_prompt(articles, interests, max_articles)
+    response = call_llm(prompt, ARTICLE_RANKING_SYSTEM, llm_model)
+
+    # Parse JSON array from response
+    try:
+        # Find the JSON array in the response
+        text = response.strip()
+        start = text.index("[")
+        end = text.index("]") + 1
+        indices = json.loads(text[start:end])
+        # Filter to valid indices
+        return [i for i in indices if isinstance(i, int) and 0 <= i < len(articles)][:max_articles]
+    except (ValueError, json.JSONDecodeError):
+        # Fallback: return first N articles
+        return list(range(min(max_articles, len(articles))))
+
+
+def generate_podcast_script(
+    articles: list[dict], interests: str, style: str, target_length: str, llm_model: str,
+) -> str:
+    """Generate a podcast script in solo or two_host style."""
+    if style == "two_host":
+        prompt = two_host_script_prompt(articles, interests, target_length)
+        return call_llm(prompt, TWO_HOST_SCRIPT_SYSTEM, llm_model, num_ctx=16384)
+    else:
+        prompt = solo_script_prompt(articles, interests, target_length)
+        return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384)

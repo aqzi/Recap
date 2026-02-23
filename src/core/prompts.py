@@ -136,6 +136,102 @@ SCORE: <number>/10
 VERDICT: <one sentence explaining why>"""
 
 
+# --- Podcast prompts ---
+
+ARTICLE_RANKING_SYSTEM = """\
+You are a content curator. You rank articles by relevance to a reader's interests.
+IMPORTANT: Always respond in English. Return ONLY a JSON array of indices, nothing else."""
+
+
+def article_ranking_prompt(articles: list[dict], interests: str, max_articles: int) -> str:
+    article_list = "\n".join(
+        f"{i}. [{a['title']}] — {a.get('summary', '')[:200]}"
+        for i, a in enumerate(articles)
+    )
+    return f"""\
+Given these articles and the reader's interests, return the indices of the top {max_articles} \
+most relevant articles as a JSON array (e.g. [2, 0, 5, 1, 3]). Most relevant first.
+
+READER INTERESTS:
+{interests}
+
+ARTICLES:
+{article_list}
+
+Return ONLY a JSON array of integer indices, nothing else."""
+
+
+LENGTH_WORD_TARGETS = {
+    "short": 400,
+    "medium": 900,
+    "long": 1800,
+}
+
+SOLO_SCRIPT_SYSTEM = """\
+You are a professional podcast host. You create engaging, informative tech podcast scripts \
+for a solo narrator. Write in a natural spoken style — conversational but informative. \
+Use transitions between topics. Start with a brief intro and end with a short outro.
+IMPORTANT: Always write in English. Output ONLY the script text, no stage directions or metadata.
+CRITICAL: This script will be read aloud by a text-to-speech engine. Do NOT use any markdown \
+formatting (no #, *, **, -, ```, links, etc.). Do NOT use bullet points, numbered lists, or \
+any special symbols. Write everything as natural spoken paragraphs. Spell out abbreviations \
+and symbols where needed (e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
+
+
+def solo_script_prompt(articles: list[dict], interests: str, target_length: str) -> str:
+    word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
+    article_blocks = "\n\n---\n\n".join(
+        f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
+        for a in articles
+    )
+    return f"""\
+Write a podcast script (~{word_target} words) covering the following articles. \
+Focus on what matters most to the listener based on their interests.
+
+LISTENER INTERESTS:
+{interests}
+
+ARTICLES:
+{article_blocks}
+
+Write a natural, engaging script for a single host. Cover the most interesting stories, \
+explain why they matter, and connect them to the listener's interests where relevant.
+Remember: plain spoken text only, no markdown, no special symbols, no lists."""
+
+
+TWO_HOST_SCRIPT_SYSTEM = """\
+You are a podcast scriptwriter. You write engaging two-host discussion scripts. \
+Host 1 (Alex) leads the conversation and introduces topics. Host 2 (Sam) adds analysis, \
+asks questions, and offers counterpoints. Write natural dialogue — not formal, not scripted-sounding.
+IMPORTANT: Always write in English. Prefix every line with either "ALEX:" or "SAM:" with no exceptions.
+CRITICAL: This script will be read aloud by a text-to-speech engine. Do NOT use any markdown \
+formatting (no #, *, **, -, ```, links, etc.). Do NOT use bullet points, numbered lists, or \
+any special symbols. Write everything as natural spoken dialogue. Spell out abbreviations \
+and symbols where needed (e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
+
+
+def two_host_script_prompt(articles: list[dict], interests: str, target_length: str) -> str:
+    word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
+    article_blocks = "\n\n---\n\n".join(
+        f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
+        for a in articles
+    )
+    return f"""\
+Write a two-host podcast script (~{word_target} words) covering the following articles. \
+Focus on what matters most to the listeners based on their interests.
+
+LISTENER INTERESTS:
+{interests}
+
+ARTICLES:
+{article_blocks}
+
+Write a natural conversation between ALEX and SAM. Alex introduces topics, Sam adds depth. \
+They discuss the most interesting stories, debate implications, and connect them to the \
+listener's interests. Every line MUST start with "ALEX:" or "SAM:".
+Remember: plain spoken text only, no markdown, no special symbols, no lists."""
+
+
 def format_timestamp(seconds: float) -> str:
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)

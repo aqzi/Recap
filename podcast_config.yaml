@@ -1,0 +1,17 @@
+tts:
+  engine: piper                     # piper | macos_say
+  voice: en_US-lessac-medium        # Piper voice model name (solo or host 1)
+  voice_host2: en_US-ryan-medium    # Piper voice for host 2 (two_host mode only)
+  speed: 1.0
+
+podcast:
+  style: solo                       # solo | two_host
+  max_articles: 5
+  target_length: medium             # short (~3min) | medium (~7min) | long (~15min)
+
+sources:
+  feeds:
+    - https://hnrss.org/newest?points=100
+    - https://feeds.arstechnica.com/arstechnica/technology-lab
+    - https://arxiv.org/rss/cs.AI
+  web_search: true                  # Also search DuckDuckGo for recent articles
