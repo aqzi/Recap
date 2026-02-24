@@ -1,4 +1,5 @@
 faster-whisper
+mlx-whisper; sys_platform == "darwin"
 ollama
 click
 rich
@@ -10,4 +11,7 @@ pathvalidate
 pydub
 pyyaml
 ddgs
+qdrant-client[fastembed]
+pymupdf
+python-docx
 *.onnx

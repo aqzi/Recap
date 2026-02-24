@@ -52,12 +52,73 @@ Requires `interest.md` — see below.
 AUDIO_FILE             Path to audio file (optional)
 --youtube, -yt         YouTube URL to download and process
 --podcast              Generate a podcast from your interests
+--kb                   Knowledge base directory for context-aware summaries
+--kb-rebuild           Force re-index the knowledge base
+--embedding-model      Fastembed model for KB embeddings (default: BAAI/bge-small-en-v1.5)
 --model, -m            Whisper model size (default: medium)
 --output-dir, -o       Output directory (default: output/<name>/)
 --llm-model            Ollama model (default: llama3.1:8b)
 --language, -l         Audio language: auto, nl, en (default: auto)
 --chunk-minutes        Chunk size in minutes (default: 10)
 ```
+
+### GPU acceleration on macOS (Apple Silicon)
+
+On Apple Silicon Macs, the tool automatically uses `mlx-whisper` for GPU-accelerated transcription via Apple's MLX framework. This is significantly faster than the CPU-based `faster-whisper` backend.
+
+- **Automatic**: If `mlx-whisper` is installed and you're on macOS, it's used by default
+- **Override**: Set `WHISPER_BACKEND=faster-whisper` to force CPU, or `WHISPER_BACKEND=mlx` to force MLX
+- Models are downloaded automatically from HuggingFace on first use
+
+| CLI Model | MLX HuggingFace Repo |
+|---|---|
+| `tiny` | `mlx-community/whisper-tiny` |
+| `base` | `mlx-community/whisper-base` |
+| `small` | `mlx-community/whisper-small` |
+| `medium` | `mlx-community/whisper-medium` |
+| `large-v2` | `mlx-community/whisper-large-v2` |
+| `large-v3` | `mlx-community/whisper-large-v3-turbo` |
+
+### 4. Knowledge base (RAG)
+
+Add a `--kb` flag pointing to a directory of reference documents to make summaries and podcasts more domain-aware:
+
+```bash
+python src/main.py meeting.mp3 --kb ./my_docs/
+python src/main.py --youtube "URL" --kb ./my_docs/
+python src/main.py --podcast --kb ./my_docs/
+```
+
+For meetings and YouTube videos, relevant KB content is injected into the summarization prompts. For podcasts, fetched articles are discussed in the context of your knowledge base.
+
+Supported formats: `.txt`, `.md`, `.pdf`, `.docx`, `.html`, `.csv`
+
+On first run, documents are chunked, embedded, and stored in a local Qdrant vector store (`data/kb_store/`). Subsequent runs reuse the cached index. Use `--kb-rebuild` to re-index when files change:
+
+```bash
+python src/main.py meeting.mp3 --kb ./my_docs/ --kb-rebuild
+```
+
+#### Embedding model
+
+By default the KB uses `BAAI/bge-small-en-v1.5` (~130 MB, 384 dimensions). For better retrieval quality, use a larger model:
+
+```bash
+python src/main.py meeting.mp3 --kb ./my_docs/ --embedding-model BAAI/bge-base-en-v1.5
+python src/main.py meeting.mp3 --kb ./my_docs/ --embedding-model BAAI/bge-large-en-v1.5
+```
+
+Popular fastembed models (downloaded automatically on first use):
+
+| Model | Size | Dimensions |
+|---|---|---|
+| `BAAI/bge-small-en-v1.5` (default) | ~130 MB | 384 |
+| `BAAI/bge-base-en-v1.5` | ~440 MB | 768 |
+| `BAAI/bge-large-en-v1.5` | ~1.2 GB | 1024 |
+| `sentence-transformers/all-MiniLM-L6-v2` | ~90 MB | 384 |
+| `nomic-ai/nomic-embed-text-v1.5` | ~560 MB | 768 |
+
+Changing the embedding model requires re-indexing. The tool will detect the mismatch and ask you to add `--kb-rebuild`.
 
 ## Configuration
 

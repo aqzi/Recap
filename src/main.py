@@ -12,11 +12,12 @@ warnings.filterwarnings("ignore", category=ResourceWarning, message="unclosed.*s
 from core.chunker import chunk_transcript
 from core.llm import (
     consolidate_summaries,
+    enhance_with_kb,
     generate_remarks,
     generate_watch_score,
     summarize_chunk,
 )
-from core.transcriber import transcribe
+from core.transcriber import transcribe, _USE_MLX
 from fileio.downloader import download_youtube_audio
 from fileio.progress import console, create_progress
 from fileio.writer import write_remarks, write_summary, write_transcript
@@ -52,7 +53,8 @@ def load_podcast_config() -> dict:
 
 # ---------- Podcast pipeline ----------
 
-def run_podcast(output_dir: str | None, llm_model: str):
+def run_podcast(output_dir: str | None, llm_model: str, kb_dir: str | None = None,
+                kb_rebuild: bool = False, embedding_model: str | None = None):
     """Run the podcast generation pipeline."""
     from podcast.scriptwriter import generate_podcast, write_podcast_output
     from podcast.tts import get_tts_engine
@@ -73,18 +75,65 @@ def run_podcast(output_dir: str | None, llm_model: str):
     console.print(f"  Style:    {style}")
     console.print(f"  LLM:      {llm_model}")
     console.print(f"  TTS:      {config.get('tts', {}).get('engine', 'piper')}")
+    if kb_dir:
+        console.print(f"  KB:       {kb_dir}")
     console.print(f"  Output:   {output_dir}")
     console.print()
 
     check_ollama(llm_model)
     os.makedirs(output_dir, exist_ok=True)
 
+    # Load knowledge base (if provided)
+    kb = None
+    if kb_dir:
+        from core.knowledge_base import KnowledgeBase
+
+        kb_kwargs = {}
+        if embedding_model:
+            kb_kwargs["embedding_model"] = embedding_model
+        kb = KnowledgeBase(**kb_kwargs)
+        console.print(f"  Embed:    {kb.embedding_model}")
+
+        # Check for model mismatch
+        mismatched_model = kb.check_model_mismatch()
+        if mismatched_model:
+            console.print(f"[bold red]Error:[/bold red] KB was indexed with model '{mismatched_model}' "
+                          f"but you requested '{kb.embedding_model}'. "
+                          f"Re-run with --kb-rebuild to re-index.")
+            kb.close()
+            sys.exit(1)
+
+        if kb_rebuild:
+            console.print("  Rebuilding knowledge base index...")
+            kb.delete_collection()
+
     with create_progress() as progress:
-        # Stages 1-4: Fetch, rank, extract, generate script
+        # Index knowledge base (if needed)
+        if kb and kb_dir:
+            if kb.is_indexed() and not kb_rebuild:
+                console.print(f"  KB loaded from cache ({kb.chunk_count} chunks)")
+            else:
+                task_kb = progress.add_task("Indexing knowledge base...", total=None)
+                try:
+                    files_loaded = kb.index_directory(kb_dir, progress, task_kb)
+                except Exception as e:
+                    console.print(f"\n[bold red]Error:[/bold red] KB indexing failed: {e}")
+                    kb.close()
+                    sys.exit(1)
+                if files_loaded == 0:
+                    console.print("  [yellow]Warning:[/yellow] No supported files found in KB directory.")
+                    kb.close()
+                    kb = None
+                else:
+                    console.print(f"  Indexed {files_loaded} file(s), {kb.chunk_count} chunks")
+
+        # Stages 1-4: Fetch, rank, extract, generate script (with KB context if available)
         try:
-            script, sources_md = generate_podcast(interests, config, llm_model, progress)
+            script, sources_md = generate_podcast(interests, config, llm_model, progress, kb=kb)
         except Exception as e:
             console.print(f"\n[bold red]Error:[/bold red] Podcast generation failed: {e}")
+            if kb:
+                kb.close()
             sys.exit(1)
 
         # Stage 5: Text-to-speech
@@ -107,6 +156,9 @@ def run_podcast(output_dir: str | None, llm_model: str):
         script_path, sources_path = write_podcast_output(script, sources_md, output_dir)
         progress.update(task_write, completed=2)
 
+    if kb:
+        kb.close()
+
     console.print()
     console.print("[bold green]Done![/bold green]")
     console.print(f"  Audio:   {audio_path}")
@@ -116,7 +168,8 @@ def run_podcast(output_dir: str | None, llm_model: str):
 
 # ---------- Summarizer pipeline ----------
 
-def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, chunk_minutes):
+def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, chunk_minutes,
+                   kb_dir=None, kb_rebuild=False, embedding_model=None):
     """Run the audio/video summarization pipeline."""
     # Validate: exactly one input source
     if audio_file and youtube:
@@ -137,10 +190,14 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
     console.print("[bold]Audio Summarizer[/bold]")
 
     # Step 1: Resolve audio source
+    backend = "mlx-whisper (GPU)" if _USE_MLX else "faster-whisper (CPU)"
+
     if is_youtube:
         console.print(f"  Source:   YouTube — {youtube}")
-        console.print(f"  Whisper:  {model}")
+        console.print(f"  Whisper:  {model} — {backend}")
         console.print(f"  LLM:      {llm_model}")
+        if kb_dir:
+            console.print(f"  KB:       {kb_dir}")
         console.print()
         console.print("Downloading YouTube audio...")
         try:
@@ -151,9 +208,11 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
         console.print(f"  Downloaded: {audio_file}")
     else:
         console.print(f"  Audio:    {audio_file}")
-        console.print(f"  Whisper:  {model}")
+        console.print(f"  Whisper:  {model} — {backend}")
         console.print(f"  LLM:      {llm_model}")
         console.print(f"  Language: {language}")
+        if kb_dir:
+            console.print(f"  KB:       {kb_dir}")
 
     # Step 2: Resolve output directory
     if output_dir is None:
@@ -165,18 +224,65 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
     check_ollama(llm_model)
     os.makedirs(output_dir, exist_ok=True)
 
+    # Step 3: Load knowledge base (if provided)
+    kb = None
+    if kb_dir:
+        from core.knowledge_base import KnowledgeBase
+
+        kb_kwargs = {}
+        if embedding_model:
+            kb_kwargs["embedding_model"] = embedding_model
+        kb = KnowledgeBase(**kb_kwargs)
+        console.print(f"  Embed:    {kb.embedding_model}")
+
+        # Check for model mismatch
+        mismatched_model = kb.check_model_mismatch()
+        if mismatched_model:
+            console.print(f"[bold red]Error:[/bold red] KB was indexed with model '{mismatched_model}' "
+                          f"but you requested '{kb.embedding_model}'. "
+                          f"Re-run with --kb-rebuild to re-index.")
+            kb.close()
+            sys.exit(1)
+
+        if kb_rebuild:
+            console.print("  Rebuilding knowledge base index...")
+            kb.delete_collection()
+
     lang = None if language == "auto" else language
 
     with create_progress() as progress:
+        # Index knowledge base (if needed)
+        if kb and kb_dir:
+            if kb.is_indexed() and not kb_rebuild:
+                console.print(f"  KB loaded from cache ({kb.chunk_count} chunks)")
+            else:
+                task_kb = progress.add_task("Indexing knowledge base...", total=None)
+                try:
+                    files_loaded = kb.index_directory(kb_dir, progress, task_kb)
+                except Exception as e:
+                    console.print(f"\n[bold red]Error:[/bold red] KB indexing failed: {e}")
+                    kb.close()
+                    sys.exit(1)
+                if files_loaded == 0:
+                    console.print("  [yellow]Warning:[/yellow] No supported files found in KB directory.")
+                    kb.close()
+                    kb = None
+                else:
+                    console.print(f"  Indexed {files_loaded} file(s), {kb.chunk_count} chunks")
+
         task_transcribe = progress.add_task("Transcribing audio...", total=None)
         try:
             segments, duration = transcribe(audio_file, model, lang, progress, task_transcribe)
         except Exception as e:
             console.print(f"\n[bold red]Error:[/bold red] Transcription failed: {e}")
+            if kb:
+                kb.close()
             sys.exit(1)
 
         if not segments:
             console.print("\n[bold red]Error:[/bold red] No speech detected in the audio file.")
+            if kb:
+                kb.close()
             sys.exit(1)
 
         chunks = chunk_transcript(segments, chunk_minutes)
@@ -186,20 +292,44 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
         chunk_summaries = []
         for i, chunk in enumerate(chunks):
             try:
-                summary = summarize_chunk(chunk, i, len(chunks), llm_model, content_type)
+                summary = summarize_chunk(
+                    chunk, i, len(chunks), llm_model, content_type,
+                )
                 chunk_summaries.append(summary)
             except Exception as e:
                 console.print(f"\n[bold red]Error:[/bold red] Summarization failed on chunk {i + 1}: {e}")
+                if kb:
+                    kb.close()
                 sys.exit(1)
             progress.update(task_summarize, advance=1)
 
         task_consolidate = progress.add_task("Consolidating summary...", total=1)
         try:
-            final_summary = consolidate_summaries(chunk_summaries, llm_model, content_type)
+            final_summary = consolidate_summaries(
+                chunk_summaries, llm_model, content_type,
+            )
         except Exception as e:
             console.print(f"\n[bold red]Error:[/bold red] Consolidation failed: {e}")
+            if kb:
+                kb.close()
             sys.exit(1)
         progress.update(task_consolidate, advance=1)
+
+        # Enhancement pass: enrich summary with KB context (if available)
+        if kb:
+            task_enhance = progress.add_task("Enhancing with KB context...", total=1)
+            kb_context = kb.retrieve(final_summary, top_k=5, max_chars=6000)
+            if kb_context:
+                try:
+                    final_summary = enhance_with_kb(
+                        final_summary, kb_context, llm_model, content_type,
+                    )
+                except Exception as e:
+                    console.print(f"\n[bold red]Error:[/bold red] KB enhancement failed: {e}")
+                    if kb:
+                        kb.close()
+                    sys.exit(1)
+            progress.update(task_enhance, advance=1)
 
         score_block = None
         if is_youtube:
@@ -208,6 +338,8 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
                 score_block = generate_watch_score(final_summary, llm_model, user_interests)
             except Exception as e:
                 console.print(f"\n[bold red]Error:[/bold red] Score generation failed: {e}")
+                if kb:
+                    kb.close()
                 sys.exit(1)
             progress.update(task_score, advance=1)
 
@@ -216,6 +348,8 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
             remarks = generate_remarks(final_summary, llm_model, content_type)
         except Exception as e:
             console.print(f"\n[bold red]Error:[/bold red] Remarks generation failed: {e}")
+            if kb:
+                kb.close()
             sys.exit(1)
         progress.update(task_remarks, advance=1)
 
@@ -226,6 +360,9 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
         progress.update(task_write, advance=1)
         r_path = write_remarks(remarks, output_dir, score_block=score_block)
         progress.update(task_write, advance=1)
+
+    if kb:
+        kb.close()
 
     console.print()
     console.print("[bold green]Done![/bold green]")
@@ -253,7 +390,14 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
     default="auto", help="Audio language. Default: auto.",
 )
 @click.option("--chunk-minutes", type=int, default=10, help="Chunk size in minutes. Default: 10.")
-def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, chunk_minutes):
+@click.option("--kb", type=click.Path(exists=True, file_okay=False),
+              default=None, help="Knowledge base directory for context-aware summaries.")
+@click.option("--kb-rebuild", is_flag=True, default=False,
+              help="Force re-index the knowledge base (use when KB files changed).")
+@click.option("--embedding-model", default=None,
+              help="Fastembed model for KB embeddings. Default: BAAI/bge-small-en-v1.5.")
+def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, chunk_minutes, kb, kb_rebuild,
+         embedding_model):
     """Transcribe and summarize audio, process YouTube videos, or generate podcasts.
 
     \b
@@ -266,9 +410,11 @@ def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, c
         if audio_file or youtube:
             console.print("[bold red]Error:[/bold red] --podcast cannot be combined with an audio file or --youtube.")
             sys.exit(1)
-        run_podcast(output_dir, llm_model)
+        run_podcast(output_dir, llm_model, kb_dir=kb, kb_rebuild=kb_rebuild,
+                    embedding_model=embedding_model)
     else:
-        run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, chunk_minutes)
+        run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, chunk_minutes,
+                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model)
 
 
 if __name__ == "__main__":

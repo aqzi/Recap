@@ -1,25 +1,50 @@
-from faster_whisper import WhisperModel
+import os
+import sys
 
-COMPUTE_TYPE = "int8"
-DEVICE = "cpu"
+# --------------- backend detection ---------------
+
+_FORCE_BACKEND = os.environ.get("WHISPER_BACKEND", "").lower().strip()
+
+_USE_MLX = False
+if _FORCE_BACKEND == "mlx":
+    _USE_MLX = True
+elif _FORCE_BACKEND in ("faster-whisper", "faster_whisper", "cpu"):
+    _USE_MLX = False
+elif sys.platform == "darwin":
+    try:
+        import mlx_whisper as _  # noqa: F401
+        _USE_MLX = True
+    except ImportError:
+        _USE_MLX = False
+
+# --------------- model-size mapping ---------------
+
+_MLX_MODEL_MAP = {
+    "tiny": "mlx-community/whisper-tiny",
+    "base": "mlx-community/whisper-base",
+    "small": "mlx-community/whisper-small",
+    "medium": "mlx-community/whisper-medium",
+    "large-v2": "mlx-community/whisper-large-v2",
+    "large-v3": "mlx-community/whisper-large-v3-turbo",
+}
+
+# --------------- faster-whisper backend ---------------
 
 
-def transcribe(audio_file: str, model_size: str, language: str | None, progress, task_id):
-    """Transcribe an audio file using faster-whisper.
+def _transcribe_faster_whisper(audio_file, model_size, language, progress, task_id):
+    from faster_whisper import WhisperModel
 
-    Returns a tuple of (segments_list, duration_seconds).
-    """
-    model = WhisperModel(model_size, device=DEVICE, compute_type=COMPUTE_TYPE)
+    model = WhisperModel(model_size, device="cpu", compute_type="int8")
 
-    transcribe_kwargs = {
+    kwargs = {
         "beam_size": 5,
         "vad_filter": True,
         "vad_parameters": {"min_silence_duration_ms": 500},
     }
     if language:
-        transcribe_kwargs["language"] = language
+        kwargs["language"] = language
 
-    segments_gen, info = model.transcribe(audio_file, **transcribe_kwargs)
+    segments_gen, info = model.transcribe(audio_file, **kwargs)
 
     duration = info.duration
     progress.update(task_id, total=int(duration))
@@ -35,3 +60,50 @@ def transcribe(audio_file: str, model_size: str, language: str | None, progress,
 
     progress.update(task_id, completed=int(duration))
     return segments, duration
+
+# --------------- mlx-whisper backend ---------------
+
+
+def _transcribe_mlx(audio_file, model_size, language, progress, task_id):
+    import mlx_whisper
+
+    repo = _MLX_MODEL_MAP.get(model_size)
+    if repo is None:
+        raise ValueError(
+            f"Unknown model size '{model_size}' for mlx-whisper. "
+            f"Supported: {', '.join(_MLX_MODEL_MAP)}"
+        )
+
+    # mlx-whisper returns all at once — no streaming progress
+    progress.update(task_id, total=None)
+
+    kwargs = {"path_or_hf_repo": repo}
+    if language:
+        kwargs["language"] = language
+
+    result = mlx_whisper.transcribe(audio_file, **kwargs)
+
+    raw_segments = result.get("segments", [])
+    segments = [
+        {"start": s["start"], "end": s["end"], "text": s["text"].strip()}
+        for s in raw_segments
+    ]
+
+    duration = segments[-1]["end"] if segments else 0.0
+    progress.update(task_id, total=int(duration), completed=int(duration))
+    return segments, duration
+
+# --------------- public API ---------------
+
+
+def transcribe(audio_file: str, model_size: str, language: str | None, progress, task_id):
+    """Transcribe an audio file.
+
+    Uses mlx-whisper (GPU) on macOS Apple Silicon if available, else faster-whisper (CPU).
+    Override with env var WHISPER_BACKEND=faster-whisper or WHISPER_BACKEND=mlx.
+
+    Returns a tuple of (segments_list, duration_seconds).
+    """
+    if _USE_MLX:
+        return _transcribe_mlx(audio_file, model_size, language, progress, task_id)
+    return _transcribe_faster_whisper(audio_file, model_size, language, progress, task_id)

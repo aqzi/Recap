@@ -6,9 +6,13 @@ Do not invent information. If the transcript is unclear, say so.
 IMPORTANT: Always write your response in English, even if the transcript is in Dutch or another language."""
 
 
-def chunk_summary_prompt(chunk: dict, chunk_index: int, total_chunks: int, content_type: str) -> str:
+def chunk_summary_prompt(
+    chunk: dict, chunk_index: int, total_chunks: int,
+    content_type: str,
+) -> str:
     start = format_timestamp(chunk["start_time"])
     end = format_timestamp(chunk["end_time"])
+
     return f"""\
 Summarize this {content_type} transcript segment (Part {chunk_index + 1} of {total_chunks}, \
 covering {start} to {end}).
@@ -30,11 +34,14 @@ You are a {content_type} analyst. You merge multiple segment summaries into a si
 IMPORTANT: Always write your response in English, even if the original {content_type} was in Dutch or another language."""
 
 
-def consolidation_prompt(chunk_summaries: list[str], content_type: str) -> str:
+def consolidation_prompt(
+    chunk_summaries: list[str], content_type: str,
+) -> str:
     label = content_type.capitalize()
     combined = "\n\n---\n\n".join(
         f"### Segment {i + 1}\n{s}" for i, s in enumerate(chunk_summaries)
     )
+
     return f"""\
 Below are summaries of consecutive segments from a single {content_type}. \
 Merge them into one cohesive {content_type} summary.
@@ -60,6 +67,39 @@ Produce a final summary in this format:
 
 ## Open Questions
 (Any unresolved questions or topics that need follow-up)"""
+
+
+def kb_enhance_system(content_type: str) -> str:
+    return f"""\
+You are a {content_type} analyst. You enhance existing summaries by adding domain-specific \
+nuance and connections from a private knowledge base.
+CRITICAL RULES:
+- The original summary content is the ground truth. Do NOT remove, replace, or contradict anything from it.
+- Only ADD nuance, clarify terminology, or note connections where the knowledge base is clearly relevant.
+- If the knowledge base context has NO meaningful connection to the summary content, return the summary UNCHANGED.
+- Keep the exact same structure and format as the original summary.
+IMPORTANT: Always write your response in English."""
+
+
+def kb_enhance_prompt(summary: str, kb_context: str, content_type: str) -> str:
+    label = content_type.capitalize()
+    return f"""\
+Below is a {content_type} summary followed by excerpts from a private knowledge base.
+
+Your task: enhance the summary by weaving in relevant context from the knowledge base — \
+but ONLY where there is a genuine connection. Add brief clarifications, terminology links, \
+or contextual notes within the existing sections. Do not add new sections or topics that \
+were not discussed in the original {content_type}.
+
+If the knowledge base content is unrelated to the summary, return the original summary exactly as-is.
+
+{label.upper()} SUMMARY:
+{summary}
+
+KNOWLEDGE BASE CONTEXT:
+{kb_context}
+
+Return the enhanced summary, keeping the same markdown structure and format."""
 
 
 def remarks_system(content_type: str) -> str:
@@ -178,12 +218,15 @@ any special symbols. Write everything as natural spoken paragraphs. Spell out ab
 and symbols where needed (e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
 
 
-def solo_script_prompt(articles: list[dict], interests: str, target_length: str) -> str:
+def solo_script_prompt(
+    articles: list[dict], interests: str, target_length: str,
+) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
     article_blocks = "\n\n---\n\n".join(
         f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
         for a in articles
     )
+
     return f"""\
 Write a podcast script (~{word_target} words) covering the following articles. \
 Focus on what matters most to the listener based on their interests.
@@ -210,12 +253,15 @@ any special symbols. Write everything as natural spoken dialogue. Spell out abbr
 and symbols where needed (e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
 
 
-def two_host_script_prompt(articles: list[dict], interests: str, target_length: str) -> str:
+def two_host_script_prompt(
+    articles: list[dict], interests: str, target_length: str,
+) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
     article_blocks = "\n\n---\n\n".join(
         f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
         for a in articles
     )
+
     return f"""\
 Write a two-host podcast script (~{word_target} words) covering the following articles. \
 Focus on what matters most to the listeners based on their interests.
@@ -230,6 +276,45 @@ Write a natural conversation between ALEX and SAM. Alex introduces topics, Sam a
 They discuss the most interesting stories, debate implications, and connect them to the \
 listener's interests. Every line MUST start with "ALEX:" or "SAM:".
 Remember: plain spoken text only, no markdown, no special symbols, no lists."""
+
+
+KB_ENHANCE_PODCAST_SYSTEM = """\
+You are a podcast script editor. You enhance existing podcast scripts by weaving in \
+relevant background context from the listener's private knowledge base.
+CRITICAL RULES:
+- The original script is the primary content. Do NOT remove or replace any of it.
+- Only ADD brief remarks, connections, or context where the knowledge base is clearly relevant \
+to topics already discussed in the script.
+- If the knowledge base has NO meaningful connection to the script, return the script UNCHANGED.
+- Preserve the exact format: plain spoken text, no markdown, no special symbols.
+IMPORTANT: Always write in English."""
+
+
+def kb_enhance_podcast_prompt(script: str, kb_context: str, style: str) -> str:
+    if style == "two_host":
+        format_note = ("Keep every line prefixed with \"ALEX:\" or \"SAM:\". "
+                       "Add KB-informed remarks as natural dialogue exchanges.")
+    else:
+        format_note = "Keep the single-host narrative style."
+
+    return f"""\
+Below is a podcast script followed by excerpts from the listener's private knowledge base.
+
+Your task: enhance the script by weaving in relevant knowledge base context — but ONLY where \
+there is a genuine connection to topics already discussed. Add brief contextual remarks, \
+connections to the listener's work, or deeper background where it fits naturally.
+
+If the knowledge base content is unrelated to the script topics, return the script exactly as-is.
+
+PODCAST SCRIPT:
+{script}
+
+KNOWLEDGE BASE CONTEXT:
+{kb_context}
+
+{format_note}
+Remember: plain spoken text only, no markdown formatting, no special symbols, no lists.
+Return the enhanced script."""
 
 
 def format_timestamp(seconds: float) -> str:

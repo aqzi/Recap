@@ -6,6 +6,7 @@ import json
 
 from core.prompts import (
     ARTICLE_RANKING_SYSTEM,
+    KB_ENHANCE_PODCAST_SYSTEM,
     SOLO_SCRIPT_SYSTEM,
     TWO_HOST_SCRIPT_SYSTEM,
     YOUTUBE_SCORE_SYSTEM,
@@ -14,6 +15,9 @@ from core.prompts import (
     chunk_summary_system,
     consolidation_prompt,
     consolidation_system,
+    kb_enhance_podcast_prompt,
+    kb_enhance_prompt,
+    kb_enhance_system,
     remarks_prompt,
     remarks_system,
     solo_script_prompt,
@@ -65,6 +69,15 @@ def consolidate_summaries(
     return call_llm(prompt, consolidation_system(content_type), llm_model, num_ctx=16384)
 
 
+def enhance_with_kb(
+    summary: str, kb_context: str, llm_model: str,
+    content_type: str = "meeting",
+) -> str:
+    """Enhance a summary with knowledge base context (second pass)."""
+    prompt = kb_enhance_prompt(summary, kb_context, content_type)
+    return call_llm(prompt, kb_enhance_system(content_type), llm_model, num_ctx=16384)
+
+
 def generate_remarks(
     consolidated_summary: str, llm_model: str,
     content_type: str = "meeting",
@@ -111,3 +124,11 @@ def generate_podcast_script(
     else:
         prompt = solo_script_prompt(articles, interests, target_length)
         return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384)
+
+
+def enhance_podcast_with_kb(
+    script: str, kb_context: str, style: str, llm_model: str,
+) -> str:
+    """Enhance a podcast script with knowledge base context (second pass)."""
+    prompt = kb_enhance_podcast_prompt(script, kb_context, style)
+    return call_llm(prompt, KB_ENHANCE_PODCAST_SYSTEM, llm_model, num_ctx=16384)

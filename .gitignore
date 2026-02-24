@@ -210,6 +210,6 @@ __marimo__/
 .venv
 data/*
 output/*
-interest.md
+kb/*
 
 *.onnx*
