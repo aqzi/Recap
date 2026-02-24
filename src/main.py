@@ -21,6 +21,7 @@ from core.transcriber import transcribe, _USE_MLX
 from fileio.downloader import download_youtube_audio
 from fileio.progress import console, create_progress
 from fileio.writer import write_remarks, write_summary, write_transcript
+from rich.prompt import Confirm, Prompt
 from utils.validation import check_audio_file, check_ollama
 
 
@@ -371,6 +372,96 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
     console.print(f"  Remarks:    {r_path}")
 
 
+# ---------- Interactive wizard ----------
+
+WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
+LANGUAGES = ["auto", "nl", "en"]
+
+
+def interactive_mode():
+    """Guide the user through mode selection and options step by step."""
+    console.print()
+    console.print("[bold]Audio Summarizer & Podcast Generator[/bold]")
+    console.print()
+    console.print("  [bold cyan][1][/bold cyan] Summarize a local audio file")
+    console.print("  [bold cyan][2][/bold cyan] Summarize a YouTube video")
+    console.print("  [bold cyan][3][/bold cyan] Generate a podcast")
+    console.print()
+
+    mode = Prompt.ask("Select mode", choices=["1", "2", "3"])
+
+    # Mode-specific input
+    audio_file = None
+    youtube = None
+
+    if mode == "1":
+        while True:
+            audio_file = Prompt.ask("Path to audio file")
+            if os.path.isfile(audio_file):
+                break
+            console.print(f"  [red]File not found:[/red] {audio_file}")
+
+    elif mode == "2":
+        youtube = Prompt.ask("YouTube URL")
+
+    # Defaults
+    whisper_model = "medium"
+    llm_model = "llama3.1:8b"
+    language = "auto"
+    output_dir = None
+    kb_dir = None
+    kb_rebuild = False
+    embedding_model = None
+    chunk_minutes = 10
+
+    # Advanced options
+    console.print()
+    customize = Confirm.ask("Customize settings?", default=False)
+
+    if customize:
+        # LLM model (all modes)
+        llm_model = Prompt.ask("Ollama model", default="llama3.1:8b")
+
+        # Whisper model (audio/youtube only)
+        if mode in ("1", "2"):
+            whisper_model = Prompt.ask(
+                f"Whisper model ({', '.join(WHISPER_MODELS)})",
+                choices=WHISPER_MODELS, default="medium",
+            )
+
+        # Language (audio file only)
+        if mode == "1":
+            language = Prompt.ask(
+                f"Language ({', '.join(LANGUAGES)})",
+                choices=LANGUAGES, default="auto",
+            )
+
+        # Knowledge base (all modes)
+        kb_input = Prompt.ask("Knowledge base directory (empty to skip)", default="")
+        if kb_input:
+            if os.path.isdir(kb_input):
+                kb_dir = kb_input
+                kb_rebuild = Confirm.ask("Rebuild KB index?", default=False)
+            else:
+                console.print(f"  [yellow]Warning:[/yellow] Directory not found: {kb_input}, skipping KB.")
+
+        # Output directory (all modes)
+        out_input = Prompt.ask("Output directory (empty for auto)", default="")
+        if out_input:
+            output_dir = out_input
+
+    console.print()
+
+    # Dispatch
+    if mode == "3":
+        run_podcast(output_dir, llm_model, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
+                    embedding_model=embedding_model)
+    else:
+        run_summarizer(audio_file, youtube, whisper_model, output_dir, llm_model,
+                       language, chunk_minutes, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
+                       embedding_model=embedding_model)
+
+
 # ---------- CLI ----------
 
 @click.command()
@@ -406,6 +497,11 @@ def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, c
       --youtube URL               Summarize a YouTube video
       --podcast                   Generate a podcast from your interests
     """
+    # No mode specified — launch interactive wizard
+    if not audio_file and not youtube and not podcast:
+        interactive_mode()
+        return
+
     if podcast:
         if audio_file or youtube:
             console.print("[bold red]Error:[/bold red] --podcast cannot be combined with an audio file or --youtube.")
