@@ -1,4 +1,4 @@
-# Audio Summarizer & Podcast Generator
+# Recap
 
 A fully local CLI tool that transcribes meetings, summarizes YouTube videos, or generates personalized tech podcasts. Runs entirely on your machine — no cloud APIs, no data leaves your device.
 
