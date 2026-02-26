@@ -9,13 +9,9 @@ warnings.filterwarnings("ignore", category=ResourceWarning, message="unclosed.*s
 from fileio.progress import console
 
 
-def derive_output_dir(audio_file, video_title):
-    """Derive the default output directory from the input source."""
-    if video_title:
-        from fileio.downloader import sanitize_filename
-        name = sanitize_filename(video_title)
-    else:
-        name = os.path.splitext(os.path.basename(audio_file))[0]
+def derive_output_dir(audio_file):
+    """Derive the default output directory from the audio filename."""
+    name = os.path.splitext(os.path.basename(audio_file))[0]
     return os.path.join("output", name)
 
 
@@ -40,7 +36,6 @@ def load_podcast_config():
 
 @click.command()
 @click.argument("audio_file", required=False, type=click.Path(exists=True))
-@click.option("--youtube", "-yt", default=None, help="YouTube URL to download and process.")
 @click.option("--podcast", is_flag=True, default=False, help="Generate a podcast from your interests.")
 @click.option(
     "--model", "-m",
@@ -61,16 +56,17 @@ def load_podcast_config():
               help="Force re-index the knowledge base (use when KB files changed).")
 @click.option("--embedding-model", default=None,
               help="Fastembed model for KB embeddings. Default: BAAI/bge-small-en-v1.5.")
+@click.option("--context", "-c", default=None,
+              help="Additional context about the audio (e.g., 'team meeting', 'university lecture').")
 @click.option("--record", "record_flag", is_flag=True, default=False, help="Record audio from an input device.")
 @click.option("--record-name", default=None, help="Optional name for the recording file.")
-def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, chunk_minutes, kb, kb_rebuild,
-         embedding_model, record_flag, record_name):
-    """Transcribe and summarize audio, process YouTube videos, generate podcasts, or record meetings.
+def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minutes, kb, kb_rebuild,
+         embedding_model, context, record_flag, record_name):
+    """Transcribe and summarize audio, generate podcasts, or record audio.
 
     \b
     Modes:
       AUDIO_FILE                  Summarize a local audio file
-      --youtube URL               Summarize a YouTube video
       --podcast                   Generate a podcast from your interests
       --record                    Record audio from an input device
     """
@@ -79,14 +75,14 @@ def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, c
         run_recorder(output_dir, record_name)
         return
 
-    if not audio_file and not youtube and not podcast:
+    if not audio_file and not podcast:
         from cli.interactive import interactive_mode
         interactive_mode()
         return
 
     if podcast:
-        if audio_file or youtube:
-            console.print("[bold red]Error:[/bold red] --podcast cannot be combined with an audio file or --youtube.")
+        if audio_file:
+            console.print("[bold red]Error:[/bold red] --podcast cannot be combined with an audio file.")
             import sys
             sys.exit(1)
         from cli.podcast import run_podcast
@@ -94,8 +90,8 @@ def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, c
                     embedding_model=embedding_model)
     else:
         from cli.summarizer import run_summarizer
-        run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, chunk_minutes,
-                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model)
+        run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_minutes,
+                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model, context=context)
 
 
 if __name__ == "__main__":

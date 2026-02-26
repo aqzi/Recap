@@ -13,15 +13,14 @@ def interactive_mode():
     console.print("[bold]Recap[/bold]")
     console.print()
     console.print("  [bold cyan][1][/bold cyan] Summarize a local audio file")
-    console.print("  [bold cyan][2][/bold cyan] Summarize a YouTube video")
-    console.print("  [bold cyan][3][/bold cyan] Generate a podcast")
-    console.print("  [bold cyan][4][/bold cyan] Record audio")
+    console.print("  [bold cyan][2][/bold cyan] Generate a podcast")
+    console.print("  [bold cyan][3][/bold cyan] Record audio")
     console.print()
 
-    mode = Prompt.ask("Select mode", choices=["1", "2", "3", "4"])
+    mode = Prompt.ask("Select mode", choices=["1", "2", "3"])
 
     # Record mode — handled separately (no shared options)
-    if mode == "4":
+    if mode == "3":
         from cli.recorder import run_recorder
         rec_name = Prompt.ask("Recording name (empty for timestamp)", default="")
         out_input = Prompt.ask("Output directory (empty for default)", default="")
@@ -29,10 +28,8 @@ def interactive_mode():
         run_recorder(out_input or None, rec_name or None)
         return
 
-    # Mode-specific input
+    # Audio file input
     audio_file = None
-    youtube = None
-
     if mode == "1":
         while True:
             audio_file = Prompt.ask("Path to audio file")
@@ -40,8 +37,12 @@ def interactive_mode():
                 break
             console.print(f"  [red]File not found:[/red] {audio_file}")
 
-    elif mode == "2":
-        youtube = Prompt.ask("YouTube URL")
+    # Context (for summarizer mode)
+    context = None
+    if mode == "1":
+        ctx_input = Prompt.ask("Context (e.g. 'team meeting', 'lecture', empty to skip)", default="")
+        if ctx_input:
+            context = ctx_input
 
     # Defaults
     whisper_model = "medium"
@@ -60,13 +61,11 @@ def interactive_mode():
     if customize:
         llm_model = Prompt.ask("Ollama model", default="llama3.1:8b")
 
-        if mode in ("1", "2"):
+        if mode == "1":
             whisper_model = Prompt.ask(
                 f"Whisper model ({', '.join(WHISPER_MODELS)})",
                 choices=WHISPER_MODELS, default="medium",
             )
-
-        if mode == "1":
             language = Prompt.ask(
                 f"Language ({', '.join(LANGUAGES)})",
                 choices=LANGUAGES, default="auto",
@@ -87,12 +86,12 @@ def interactive_mode():
     console.print()
 
     # Dispatch
-    if mode == "3":
+    if mode == "2":
         from cli.podcast import run_podcast
         run_podcast(output_dir, llm_model, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
                     embedding_model=embedding_model)
     else:
         from cli.summarizer import run_summarizer
-        run_summarizer(audio_file, youtube, whisper_model, output_dir, llm_model,
+        run_summarizer(audio_file, whisper_model, output_dir, llm_model,
                        language, chunk_minutes, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
-                       embedding_model=embedding_model)
+                       embedding_model=embedding_model, context=context)

@@ -1,23 +1,29 @@
 from utils.formatting import format_timestamp
 
 
-def chunk_summary_system(content_type: str) -> str:
+def _context_line(context: str | None) -> str:
+    """Return a context instruction line for system prompts, or empty string."""
+    if context:
+        return f"\nAdditional context about this audio: {context}"
+    return ""
+
+
+def chunk_summary_system(context: str | None = None) -> str:
     return f"""\
-You are a {content_type} analyst. You produce concise, accurate summaries of {content_type} transcript segments.
+You are an audio analyst. You produce concise, accurate summaries of audio transcript segments.
 Focus on key topics discussed, decisions made, action items mentioned, and important statements.
 Do not invent information. If the transcript is unclear, say so.
-IMPORTANT: Always write your response in English, even if the transcript is in Dutch or another language."""
+IMPORTANT: Always write your response in English, even if the transcript is in another language.{_context_line(context)}"""
 
 
 def chunk_summary_prompt(
     chunk: dict, chunk_index: int, total_chunks: int,
-    content_type: str,
 ) -> str:
     start = format_timestamp(chunk["start_time"])
     end = format_timestamp(chunk["end_time"])
 
     return f"""\
-Summarize this {content_type} transcript segment (Part {chunk_index + 1} of {total_chunks}, \
+Summarize this audio transcript segment (Part {chunk_index + 1} of {total_chunks}, \
 covering {start} to {end}).
 
 TRANSCRIPT:
@@ -30,153 +36,79 @@ Provide a structured summary with:
 - **Action Items**: Tasks or follow-ups mentioned (include who is responsible if mentioned)"""
 
 
-def consolidation_system(content_type: str) -> str:
+def consolidation_system(context: str | None = None) -> str:
     return f"""\
-You are a {content_type} analyst. You merge multiple segment summaries into a single coherent \
-{content_type} summary. Eliminate redundancy, maintain chronological flow, and produce a well-structured document.
-IMPORTANT: Always write your response in English, even if the original {content_type} was in Dutch or another language."""
+You are an audio analyst. You merge multiple segment summaries into a single coherent \
+summary. Produce a concise, well-structured document — keep all sections short and to the point.
+IMPORTANT: Always write your response in English, even if the original audio was in another language.{_context_line(context)}"""
 
 
-def consolidation_prompt(
-    chunk_summaries: list[str], content_type: str,
-) -> str:
-    label = content_type.capitalize()
+def consolidation_prompt(chunk_summaries: list[str]) -> str:
     combined = "\n\n---\n\n".join(
         f"### Segment {i + 1}\n{s}" for i, s in enumerate(chunk_summaries)
     )
 
     return f"""\
-Below are summaries of consecutive segments from a single {content_type}. \
-Merge them into one cohesive {content_type} summary.
+Below are summaries of consecutive segments from a single audio recording. \
+Merge them into one cohesive summary.
 
 SEGMENT SUMMARIES:
 {combined}
 
 Produce a final summary in this format:
 
-# {label} Summary
+# Summary
 
-## Overview
-(2-3 sentence high-level overview of the {content_type} purpose and outcome)
+## TL;DR
+(3-5 bullet points capturing the most important takeaways — be very brief and direct)
 
 ## Key Topics
-(For each major topic discussed, provide a subsection with key points)
+(For each major topic, a brief subsection with key points — a few sentences each, not exhaustive)
 
-## Decisions Made
-(Bulleted list of all decisions reached during the {content_type})
+## Pros
+(Brief bullet points — positive aspects, good decisions, strengths identified)
+
+## Cons
+(Brief bullet points — risks, weaknesses, problems, or concerns raised or implied)
+
+## Remarks
+(Brief additional observations, nuances, or noteworthy points)
 
 ## Action Items
-(Bulleted list: each item should include the task, responsible person if known, and deadline if mentioned)
-
-## Open Questions
-(Any unresolved questions or topics that need follow-up)"""
+(Bulleted list: task, responsible person if known, deadline if mentioned — omit this section entirely if there are no action items)"""
 
 
-def kb_enhance_system(content_type: str) -> str:
-    return f"""\
-You are a {content_type} analyst. You enhance existing summaries by adding domain-specific \
+def kb_enhance_system() -> str:
+    return """\
+You are an audio analyst. You enhance existing summaries by adding domain-specific \
 nuance and connections from a private knowledge base.
 CRITICAL RULES:
 - The original summary content is the ground truth. Do NOT remove, replace, or contradict anything from it.
 - Only ADD nuance, clarify terminology, or note connections where the knowledge base is clearly relevant.
 - If the knowledge base context has NO meaningful connection to the summary content, return the summary UNCHANGED.
 - Keep the exact same structure and format as the original summary.
+- Keep it concise — do not make the summary significantly longer.
 IMPORTANT: Always write your response in English."""
 
 
-def kb_enhance_prompt(summary: str, kb_context: str, content_type: str) -> str:
-    label = content_type.capitalize()
+def kb_enhance_prompt(summary: str, kb_context: str) -> str:
     return f"""\
-Below is a {content_type} summary followed by excerpts from a private knowledge base.
+Below is a summary followed by excerpts from a private knowledge base.
 
 Your task: enhance the summary by weaving in relevant context from the knowledge base — \
 but ONLY where there is a genuine connection. Add brief clarifications, terminology links, \
 or contextual notes within the existing sections. Do not add new sections or topics that \
-were not discussed in the original {content_type}.
+were not discussed in the original audio.
 
 If the knowledge base content is unrelated to the summary, return the original summary exactly as-is.
 
-{label.upper()} SUMMARY:
+SUMMARY:
 {summary}
 
 KNOWLEDGE BASE CONTEXT:
 {kb_context}
 
 Return the enhanced summary, keeping the same markdown structure and format."""
-
-
-def remarks_system(content_type: str) -> str:
-    return f"""\
-You are a senior {content_type} facilitator and organizational consultant. \
-You analyze {content_type} summaries and provide candid, actionable feedback about \
-{content_type} effectiveness, team dynamics, and follow-up priorities.
-IMPORTANT: Always write your response in English, even if the original {content_type} was in Dutch or another language."""
-
-
-def remarks_prompt(consolidated_summary: str, content_type: str) -> str:
-    label = content_type.capitalize()
-    return f"""\
-Based on this {content_type} summary, provide remarks and actionable suggestions.
-
-{label.upper()} SUMMARY:
-{consolidated_summary}
-
-Provide your analysis in this format:
-
-# {label} Remarks & Suggestions
-
-## {label} Effectiveness
-(Was this {content_type} productive? Were goals achieved? What could improve the {content_type} format?)
-
-## Key Risks & Concerns
-(Any risks, blockers, or concerns implied by the discussion that the team should be aware of)
-
-## Priority Actions
-(Rank the action items by urgency/impact. Highlight any that seem at risk of being dropped)
-
-## Suggestions
-(Concrete suggestions for follow-up, process improvements, or next steps that weren't \
-explicitly discussed but would be valuable)
-
-## Follow-up Recommendations
-(Should there be a follow-up? What should the agenda include? Who should attend?)"""
-
-
-YOUTUBE_SCORE_SYSTEM = """\
-You are a content analyst. You evaluate video summaries and determine whether the viewer \
-should watch the original video themselves or if the summary is sufficient.
-IMPORTANT: Always write your response in English."""
-
-
-def youtube_score_prompt(consolidated_summary: str, user_interests: str | None = None) -> str:
-    interests_block = ""
-    if user_interests:
-        interests_block = f"""
-
-The viewer has the following interests and goals:
-{user_interests}
-
-Factor these interests heavily into your score. A high score means the video is highly relevant \
-to these interests and worth watching in full. A low score means the summary is sufficient \
-given what the viewer cares about."""
-
-    return f"""\
-Based on this video summary, score how important it is for someone to watch the original video \
-rather than just reading the summary.
-
-VIDEO SUMMARY:
-{consolidated_summary}{interests_block}
-
-Score from 1 to 10:
-- 1-3: The summary captures everything. No need to watch.
-- 4-6: The summary covers the main points, but some nuance or context is lost.
-- 7-10: Strongly recommended to watch. The video likely contains visual demos, \
-complex explanations, emotional nuance, or interactive elements that text cannot capture.
-
-Respond in EXACTLY this format (no other text):
-
-SCORE: <number>/10
-VERDICT: <one sentence explaining why>"""
 
 
 # --- Podcast prompts ---

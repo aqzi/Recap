@@ -1,6 +1,6 @@
 # Recap
 
-A fully local CLI tool that transcribes meetings, summarizes YouTube videos, or generates personalized tech podcasts. Runs entirely on your machine — no cloud APIs, no data leaves your device.
+A fully local CLI tool that transcribes and summarizes audio, records from input devices, or generates personalized tech podcasts. Runs entirely on your machine — no cloud APIs, no data leaves your device.
 
 ## Requirements
 
@@ -22,19 +22,14 @@ ollama pull llama3.1:8b
 
 ```bash
 python src/main.py meeting.mp3
+python src/main.py meeting.mp3 --context "team standup meeting"
 ```
 
-Output: `output/meeting/transcript.md`, `summary.md`, `remarks.md`
+Output: `output/meeting/transcript.md`, `summary.md`
 
-### 2. Summarize a YouTube video
+Use `--context` to tell the summarizer what kind of audio it is (e.g., "team meeting", "university lecture", "interview"). This helps produce more relevant summaries.
 
-```bash
-python src/main.py --youtube "https://www.youtube.com/watch?v=abc123"
-```
-
-Audio is downloaded to `data/`, output goes to `output/<video_title>/`. Includes a **Watch Recommendation Score** (1-10) in `remarks.md`.
-
-### 3. Generate a podcast
+### 2. Generate a podcast
 
 ```bash
 python src/main.py --podcast
@@ -46,7 +41,7 @@ Output: `output/podcast_<date>/podcast.wav`, `script.md`, `sources.md`
 
 Requires `interest.md` — see below.
 
-### 4. Record audio
+### 3. Record audio
 
 ```bash
 python src/main.py --record
@@ -77,10 +72,10 @@ Then open **Audio MIDI Setup**, click `+` to create a **Multi-Output Device** th
 
 ```
 AUDIO_FILE             Path to audio file (optional)
---youtube, -yt         YouTube URL to download and process
 --podcast              Generate a podcast from your interests
 --record               Record audio from an input device
 --record-name          Optional name for the recording file
+--context, -c          Additional context about the audio (e.g., 'team meeting', 'lecture')
 --kb                   Knowledge base directory for context-aware summaries
 --kb-rebuild           Force re-index the knowledge base
 --embedding-model      Fastembed model for KB embeddings (default: BAAI/bge-small-en-v1.5)
@@ -108,17 +103,16 @@ On Apple Silicon Macs, the tool automatically uses `mlx-whisper` for GPU-acceler
 | `large-v2` | `mlx-community/whisper-large-v2` |
 | `large-v3` | `mlx-community/whisper-large-v3-turbo` |
 
-### 4. Knowledge base (RAG)
+### Knowledge base (RAG)
 
 Add a `--kb` flag pointing to a directory of reference documents to make summaries and podcasts more domain-aware:
 
 ```bash
 python src/main.py meeting.mp3 --kb ./my_docs/
-python src/main.py --youtube "URL" --kb ./my_docs/
 python src/main.py --podcast --kb ./my_docs/
 ```
 
-For meetings and YouTube videos, relevant KB content is injected into the summarization prompts. For podcasts, fetched articles are discussed in the context of your knowledge base.
+For audio summaries, relevant KB content is injected into the summarization prompts. For podcasts, fetched articles are discussed in the context of your knowledge base.
 
 Supported formats: `.txt`, `.md`, `.pdf`, `.docx`, `.html`, `.csv`
 
@@ -153,7 +147,7 @@ Changing the embedding model requires re-indexing. The tool will detect the mism
 
 ### `interest.md`
 
-Personalizes YouTube watch scores and podcast content. Create in the project root:
+Personalizes podcast content. Create in the project root:
 
 ```markdown
 I'm interested in AI/ML engineering, startup strategy, and Python tooling.

@@ -11,7 +11,6 @@ from core.prompts import (
     KB_ENHANCE_PODCAST_SYSTEM,
     SOLO_SCRIPT_SYSTEM,
     TWO_HOST_SCRIPT_SYSTEM,
-    YOUTUBE_SCORE_SYSTEM,
     article_ranking_prompt,
     chunk_summary_prompt,
     chunk_summary_system,
@@ -20,11 +19,8 @@ from core.prompts import (
     kb_enhance_podcast_prompt,
     kb_enhance_prompt,
     kb_enhance_system,
-    remarks_prompt,
-    remarks_system,
     solo_script_prompt,
     two_host_script_prompt,
-    youtube_score_prompt,
 )
 
 DEFAULT_NUM_CTX = 8192
@@ -57,40 +53,24 @@ def call_llm(
 
 def summarize_chunk(
     chunk: dict, chunk_index: int, total_chunks: int, llm_model: str,
-    content_type: str = "meeting",
+    context: str | None = None,
 ) -> str:
-    prompt = chunk_summary_prompt(chunk, chunk_index, total_chunks, content_type)
-    return call_llm(prompt, chunk_summary_system(content_type), llm_model)
+    prompt = chunk_summary_prompt(chunk, chunk_index, total_chunks)
+    return call_llm(prompt, chunk_summary_system(context), llm_model)
 
 
 def consolidate_summaries(
     chunk_summaries: list[str], llm_model: str,
-    content_type: str = "meeting",
+    context: str | None = None,
 ) -> str:
-    prompt = consolidation_prompt(chunk_summaries, content_type)
-    return call_llm(prompt, consolidation_system(content_type), llm_model, num_ctx=16384)
+    prompt = consolidation_prompt(chunk_summaries)
+    return call_llm(prompt, consolidation_system(context), llm_model, num_ctx=16384)
 
 
-def enhance_with_kb(
-    summary: str, kb_context: str, llm_model: str,
-    content_type: str = "meeting",
-) -> str:
+def enhance_with_kb(summary: str, kb_context: str, llm_model: str) -> str:
     """Enhance a summary with knowledge base context (second pass)."""
-    prompt = kb_enhance_prompt(summary, kb_context, content_type)
-    return call_llm(prompt, kb_enhance_system(content_type), llm_model, num_ctx=16384)
-
-
-def generate_remarks(
-    consolidated_summary: str, llm_model: str,
-    content_type: str = "meeting",
-) -> str:
-    prompt = remarks_prompt(consolidated_summary, content_type)
-    return call_llm(prompt, remarks_system(content_type), llm_model, num_ctx=16384)
-
-
-def generate_watch_score(consolidated_summary: str, llm_model: str, user_interests: str | None = None) -> str:
-    prompt = youtube_score_prompt(consolidated_summary, user_interests)
-    return call_llm(prompt, YOUTUBE_SCORE_SYSTEM, llm_model)
+    prompt = kb_enhance_prompt(summary, kb_context)
+    return call_llm(prompt, kb_enhance_system(), llm_model, num_ctx=16384)
 
 
 # --- Podcast functions ---

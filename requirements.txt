@@ -3,7 +3,6 @@ mlx-whisper; sys_platform == "darwin"
 ollama
 click
 rich
-yt-dlp
 feedparser
 trafilatura
 piper-tts
