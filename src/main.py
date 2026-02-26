@@ -9,6 +9,8 @@ import yaml
 # Suppress unclosed socket warnings from the ollama library's HTTP client
 warnings.filterwarnings("ignore", category=ResourceWarning, message="unclosed.*socket")
 
+from datetime import datetime
+
 from core.chunker import chunk_transcript
 from core.llm import (
     consolidate_summaries,
@@ -20,6 +22,7 @@ from core.llm import (
 from core.transcriber import transcribe, _USE_MLX
 from fileio.downloader import download_youtube_audio
 from fileio.progress import console, create_progress
+from fileio.recorder import list_input_devices, record
 from fileio.writer import write_remarks, write_summary, write_transcript
 from rich.prompt import Confirm, Prompt
 from utils.validation import check_audio_file, check_ollama
@@ -372,6 +375,55 @@ def run_summarizer(audio_file, youtube, model, output_dir, llm_model, language, 
     console.print(f"  Remarks:    {r_path}")
 
 
+# ---------- Recorder ----------
+
+def run_recorder(output_dir: str | None, record_name: str | None):
+    """Record audio from an input device and save to a WAV file."""
+    console.print()
+    console.print("[bold]Audio Recorder[/bold]")
+    console.print()
+
+    devices = list_input_devices()
+    if not devices:
+        console.print("[bold red]Error:[/bold red] No audio input devices found.")
+        sys.exit(1)
+
+    console.print("  Available input devices:")
+    for dev in devices:
+        console.print(f"    [bold cyan][{dev['index']}][/bold cyan] {dev['name']}")
+    console.print()
+
+    valid_indices = [str(d["index"]) for d in devices]
+    choice = Prompt.ask("Select device", choices=valid_indices)
+    device_index = int(choice)
+
+    if output_dir is None:
+        output_dir = os.path.join("output", "recordings")
+    os.makedirs(output_dir, exist_ok=True)
+
+    if record_name:
+        filename = f"{record_name}.wav"
+    else:
+        stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        filename = f"recording_{stamp}.wav"
+
+    output_path = os.path.join(output_dir, filename)
+
+    console.print()
+    console.print(f"  Output: {output_path}")
+    console.print()
+    console.print("[bold green]Recording... press Enter to stop.[/bold green]")
+
+    duration = record(device_index, output_path)
+
+    minutes = int(duration // 60)
+    seconds = int(duration % 60)
+    console.print()
+    console.print("[bold green]Done![/bold green]")
+    console.print(f"  File:     {output_path}")
+    console.print(f"  Duration: {minutes}m {seconds}s")
+
+
 # ---------- Interactive wizard ----------
 
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
@@ -386,13 +438,21 @@ def interactive_mode():
     console.print("  [bold cyan][1][/bold cyan] Summarize a local audio file")
     console.print("  [bold cyan][2][/bold cyan] Summarize a YouTube video")
     console.print("  [bold cyan][3][/bold cyan] Generate a podcast")
+    console.print("  [bold cyan][4][/bold cyan] Record a meeting")
     console.print()
 
-    mode = Prompt.ask("Select mode", choices=["1", "2", "3"])
+    mode = Prompt.ask("Select mode", choices=["1", "2", "3", "4"])
 
     # Mode-specific input
     audio_file = None
     youtube = None
+
+    if mode == "4":
+        rec_name = Prompt.ask("Recording name (empty for timestamp)", default="")
+        out_input = Prompt.ask("Output directory (empty for default)", default="")
+        console.print()
+        run_recorder(out_input or None, rec_name or None)
+        return
 
     if mode == "1":
         while True:
@@ -487,16 +547,24 @@ def interactive_mode():
               help="Force re-index the knowledge base (use when KB files changed).")
 @click.option("--embedding-model", default=None,
               help="Fastembed model for KB embeddings. Default: BAAI/bge-small-en-v1.5.")
+@click.option("--record", "record_flag", is_flag=True, default=False, help="Record audio from an input device.")
+@click.option("--record-name", default=None, help="Optional name for the recording file.")
 def main(audio_file, youtube, podcast, model, output_dir, llm_model, language, chunk_minutes, kb, kb_rebuild,
-         embedding_model):
-    """Transcribe and summarize audio, process YouTube videos, or generate podcasts.
+         embedding_model, record_flag, record_name):
+    """Transcribe and summarize audio, process YouTube videos, generate podcasts, or record meetings.
 
     \b
     Modes:
       AUDIO_FILE                  Summarize a local audio file
       --youtube URL               Summarize a YouTube video
       --podcast                   Generate a podcast from your interests
+      --record                    Record audio from an input device
     """
+    # Record mode
+    if record_flag:
+        run_recorder(output_dir, record_name)
+        return
+
     # No mode specified — launch interactive wizard
     if not audio_file and not youtube and not podcast:
         interactive_mode()

@@ -14,4 +14,6 @@ ddgs
 qdrant-client[fastembed]
 pymupdf
 python-docx
+sounddevice
+soundfile
 *.onnx

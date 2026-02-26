@@ -46,12 +46,41 @@ Output: `output/podcast_<date>/podcast.wav`, `script.md`, `sources.md`
 
 Requires `interest.md` — see below.
 
+### 4. Record a meeting
+
+```bash
+python src/main.py --record
+python src/main.py --record --record-name "standup" --output-dir ./recordings
+```
+
+Records audio from a selected input device and saves it as a WAV file. The recording is standalone — it does not auto-start transcription or summarization. To summarize a recording afterwards, pass the file to the summarizer:
+
+```bash
+python src/main.py output/recordings/standup.wav
+```
+
+#### System audio capture setup
+
+To record audio from meeting apps (Teams, Zoom, Google Meet), you need to capture system audio. This requires platform-specific setup:
+
+**macOS** — Install [BlackHole](https://github.com/ExistentialAudio/BlackHole) virtual audio driver:
+```bash
+brew install blackhole-2ch
+```
+Then open **Audio MIDI Setup**, click `+` to create a **Multi-Output Device** that includes both your speakers and BlackHole. Set this as your system output. When recording, select the BlackHole device. For more info, take a look here: https://github.com/ExistentialAudio/BlackHole/wiki/Multi-Output-Device
+
+**Windows** — Enable **Stereo Mix** in Sound settings (disabled by default on most systems), or install [VB-Cable](https://vb-audio.com/Cable/) virtual audio device. Select it as the input device when recording.
+
+**Linux** — PulseAudio monitor sources are usually available by default. Select the monitor source for your output device (e.g. `Monitor of Built-in Audio`).
+
 ### Options
 
 ```
 AUDIO_FILE             Path to audio file (optional)
 --youtube, -yt         YouTube URL to download and process
 --podcast              Generate a podcast from your interests
+--record               Record audio from an input device
+--record-name          Optional name for the recording file
 --kb                   Knowledge base directory for context-aware summaries
 --kb-rebuild           Force re-index the knowledge base
 --embedding-model      Fastembed model for KB embeddings (default: BAAI/bge-small-en-v1.5)
