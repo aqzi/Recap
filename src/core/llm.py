@@ -1,8 +1,10 @@
+import json
+import logging
 import time
 
 import ollama
 
-import json
+logger = logging.getLogger(__name__)
 
 from core.prompts import (
     ARTICLE_RANKING_SYSTEM,
@@ -110,7 +112,7 @@ def rank_articles(
         # Filter to valid indices
         return [i for i in indices if isinstance(i, int) and 0 <= i < len(articles)][:max_articles]
     except (ValueError, json.JSONDecodeError):
-        # Fallback: return first N articles
+        logger.warning("Article ranking failed to parse LLM response, using default order")
         return list(range(min(max_articles, len(articles))))
 
 

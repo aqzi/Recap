@@ -8,7 +8,7 @@ def sanitize_filename(name: str) -> str:
     """Remove characters that are unsafe for filenames."""
     name = re.sub(r'[\\/*?:"<>|]', "", name)
     name = name.strip().replace(" ", "_")
-    return name[:100]  # limit length
+    return name[:100]
 
 
 def download_youtube_audio(url: str, data_dir: str = "data") -> tuple[str, str]:
@@ -18,13 +18,8 @@ def download_youtube_audio(url: str, data_dir: str = "data") -> tuple[str, str]:
     """
     os.makedirs(data_dir, exist_ok=True)
 
-    # First pass: extract info to get the title
-    with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
-        info = ydl.extract_info(url, download=False)
-        title = info.get("title", "video")
-
-    safe_title = sanitize_filename(title)
-    output_path = os.path.join(data_dir, safe_title)
+    # Use a temp template, then rename after we know the title
+    temp_template = os.path.join(data_dir, "%(title)s")
 
     ydl_opts = {
         "format": "bestaudio/best",
@@ -35,13 +30,21 @@ def download_youtube_audio(url: str, data_dir: str = "data") -> tuple[str, str]:
                 "preferredquality": "192",
             }
         ],
-        "outtmpl": output_path,
+        "outtmpl": temp_template,
         "quiet": True,
         "no_warnings": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+        info = ydl.extract_info(url, download=True)
+        title = info.get("title", "video")
 
-    audio_file = output_path + ".mp3"
+    safe_title = sanitize_filename(title)
+    audio_file = os.path.join(data_dir, safe_title + ".mp3")
+
+    # yt-dlp uses the raw title for the filename; rename to sanitized version
+    raw_file = os.path.join(data_dir, sanitize_filename(info.get("title", "video")) + ".mp3")
+    if not os.path.isfile(audio_file) and os.path.isfile(raw_file):
+        os.rename(raw_file, audio_file)
+
     return audio_file, title

@@ -1,7 +1,10 @@
+import logging
 import threading
 
 import sounddevice as sd
 import soundfile as sf
+
+logger = logging.getLogger(__name__)
 
 
 def list_input_devices() -> list[dict]:
@@ -22,9 +25,7 @@ def list_input_devices() -> list[dict]:
 def record(device_index: int, output_path: str, sample_rate: int = 44100) -> float:
     """Record audio from a device, streaming directly to a WAV file.
 
-    Blocks until the caller signals stop via the returned threading.Event,
-    or until the user presses Enter on the main thread.
-
+    Blocks until the user presses Enter to stop.
     Returns the duration in seconds.
     """
     stop_event = threading.Event()
@@ -34,9 +35,11 @@ def record(device_index: int, output_path: str, sample_rate: int = 44100) -> flo
                       channels=1, subtype="PCM_16") as wav:
 
         def callback(indata, frame_count, time_info, status):
+            if status:
+                logger.warning("Audio input status: %s", status)
             if stop_event.is_set():
                 raise sd.CallbackAbort
-            wav.write(indata[:, 0] if indata.shape[1] > 1 else indata)
+            wav.write(indata)
             frames_written[0] += frame_count
 
         with sd.InputStream(samplerate=sample_rate, device=device_index,

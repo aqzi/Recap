@@ -147,6 +147,54 @@ class KnowledgeBase:
         self.client.close()
 
 
+# --- Shared KB initialization helper ---
+
+
+def init_kb(kb_dir, kb_rebuild, embedding_model, progress, console):
+    """Initialize and optionally index a KnowledgeBase.
+
+    Returns a KnowledgeBase instance, or None if KB is empty/unavailable.
+    Handles model mismatch checks and indexing with progress feedback.
+    """
+    import sys
+
+    kb_kwargs = {}
+    if embedding_model:
+        kb_kwargs["embedding_model"] = embedding_model
+    kb = KnowledgeBase(**kb_kwargs)
+    console.print(f"  Embed:    {kb.embedding_model}")
+
+    mismatched_model = kb.check_model_mismatch()
+    if mismatched_model:
+        console.print(f"[bold red]Error:[/bold red] KB was indexed with model '{mismatched_model}' "
+                      f"but you requested '{kb.embedding_model}'. "
+                      f"Re-run with --kb-rebuild to re-index.")
+        kb.close()
+        sys.exit(1)
+
+    if kb_rebuild:
+        console.print("  Rebuilding knowledge base index...")
+        kb.delete_collection()
+
+    if kb.is_indexed() and not kb_rebuild:
+        console.print(f"  KB loaded from cache ({kb.chunk_count} chunks)")
+    else:
+        task_kb = progress.add_task("Indexing knowledge base...", total=None)
+        try:
+            files_loaded = kb.index_directory(kb_dir, progress, task_kb)
+        except Exception as e:
+            console.print(f"\n[bold red]Error:[/bold red] KB indexing failed: {e}")
+            kb.close()
+            sys.exit(1)
+        if files_loaded == 0:
+            console.print("  [yellow]Warning:[/yellow] No supported files found in KB directory.")
+            kb.close()
+            return None
+        console.print(f"  Indexed {files_loaded} file(s), {kb.chunk_count} chunks")
+
+    return kb
+
+
 # --- File discovery ---
 
 

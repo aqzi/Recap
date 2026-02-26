@@ -46,7 +46,7 @@ Output: `output/podcast_<date>/podcast.wav`, `script.md`, `sources.md`
 
 Requires `interest.md` — see below.
 
-### 4. Record a meeting
+### 4. Record audio
 
 ```bash
 python src/main.py --record
@@ -186,16 +186,16 @@ sources:
 
 ### Piper TTS voice setup
 
-When using Piper, you need to download voice model files (`.onnx` + `.onnx.json`) and place them in the project root. Browse available voices at https://github.com/rhasspy/piper/blob/master/VOICES.md.
+When using Piper, you need to download voice model files (`.onnx` + `.onnx.json`) and place them in the `voices/` directory. Browse available voices at https://github.com/rhasspy/piper/blob/master/VOICES.md.
 
 ```bash
-# Example: download the default voice
+mkdir -p voices && cd voices
 python3 -m piper.download_voices en_US-ryan-medium
 python3 -m piper.download_voices en_US-lessac-medium
 ```
 
 The `voice` value in `podcast_config.yaml` must match the filename without `.onnx` (e.g. `en_US-lessac-medium`).
 
-For macOS without extra setup, use `engine: macos_say` with a system voice name like `Samantha` or `Daniel`.
+For macOS without extra setup, use `engine: macos_say` with a system voice name like `Daniel`.
 
 Supports Dutch and English audio. Output is always in English.

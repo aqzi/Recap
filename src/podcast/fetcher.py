@@ -1,6 +1,10 @@
+import logging
+
 import feedparser
 import trafilatura
 from ddgs import DDGS
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_rss_articles(feed_urls: list[str], max_per_feed: int = 10) -> list[dict]:
@@ -22,7 +26,8 @@ def fetch_rss_articles(feed_urls: list[str], max_per_feed: int = 10) -> list[dic
                     "summary": entry.get("summary", ""),
                     "source": "rss",
                 })
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to fetch RSS feed %s: %s", url, e)
             continue
 
     return articles
@@ -30,7 +35,6 @@ def fetch_rss_articles(feed_urls: list[str], max_per_feed: int = 10) -> list[dic
 
 def search_web_articles(interests: str, max_results: int = 10) -> list[dict]:
     """Search DuckDuckGo for recent articles matching interests."""
-    # Build a concise query from interests
     lines = [l.strip("- ").strip() for l in interests.splitlines() if l.strip().startswith("-")]
     query = "latest news " + ", ".join(lines[:3]) if lines else "latest tech news"
 
@@ -45,8 +49,8 @@ def search_web_articles(interests: str, max_results: int = 10) -> list[dict]:
                     "summary": r.get("body", ""),
                     "source": "web_search",
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Web search failed: %s", e)
 
     return articles
 
@@ -57,6 +61,6 @@ def extract_article_text(url: str) -> str | None:
         downloaded = trafilatura.fetch_url(url)
         if downloaded:
             return trafilatura.extract(downloaded)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to extract text from %s: %s", url, e)
     return None

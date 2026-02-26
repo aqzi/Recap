@@ -1,3 +1,6 @@
+from utils.formatting import format_timestamp
+
+
 def chunk_summary_system(content_type: str) -> str:
     return f"""\
 You are a {content_type} analyst. You produce concise, accurate summaries of {content_type} transcript segments.
@@ -315,12 +318,3 @@ KNOWLEDGE BASE CONTEXT:
 {format_note}
 Remember: plain spoken text only, no markdown formatting, no special symbols, no lists.
 Return the enhanced script."""
-
-
-def format_timestamp(seconds: float) -> str:
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    if h > 0:
-        return f"{h:d}:{m:02d}:{s:02d}"
-    return f"{m:d}:{s:02d}"

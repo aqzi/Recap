@@ -1,6 +1,6 @@
 import os
 
-from core.prompts import format_timestamp
+from utils.formatting import format_timestamp
 
 
 def write_transcript(segments: list[dict], output_dir: str, content_type: str = "meeting") -> str:

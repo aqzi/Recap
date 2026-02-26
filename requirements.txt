@@ -16,4 +16,3 @@ pymupdf
 python-docx
 sounddevice
 soundfile
-*.onnx

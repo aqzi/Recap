@@ -1,8 +1,16 @@
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from abc import ABC, abstractmethod
+from pathlib import Path
+
+# Project root: src/podcast/tts.py -> parents[2] = project root
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_VOICES_DIR = _PROJECT_ROOT / "voices"
+
+SUBPROCESS_TIMEOUT = 300  # 5 minutes
 
 
 class TTSEngine(ABC):
@@ -18,7 +26,6 @@ class TTSEngine(ABC):
         Default implementation: just synthesize as single voice.
         Subclasses can override for real multi-voice support.
         """
-        # Strip speaker labels and synthesize as one voice
         clean = re.sub(r"^(ALEX|SAM):\s*", "", script, flags=re.MULTILINE)
         self.synthesize(clean, output_path)
 
@@ -26,16 +33,15 @@ class TTSEngine(ABC):
 def _resolve_piper_model(voice: str) -> str:
     """Resolve a Piper voice name to a full .onnx model path.
 
-    Looks for <voice>.onnx in the project root directory.
+    Looks for <voice>.onnx in the voices/ directory.
     If voice is already an absolute path or ends with .onnx, use as-is.
     """
     if os.path.isabs(voice) or voice.endswith(".onnx"):
         return voice
 
-    # Look in project root (cwd)
-    candidate = os.path.join(os.getcwd(), f"{voice}.onnx")
-    if os.path.isfile(candidate):
-        return candidate
+    candidate = _VOICES_DIR / f"{voice}.onnx"
+    if candidate.is_file():
+        return str(candidate)
 
     # Fallback: return as-is and let piper handle the error
     return voice
@@ -61,7 +67,8 @@ class PiperTTS(TTSEngine):
                 "--length-scale", str(1.0 / self.speed),
             ]
             with open(text_path) as stdin:
-                subprocess.run(cmd, stdin=stdin, check=True, capture_output=True)
+                subprocess.run(cmd, stdin=stdin, check=True, capture_output=True,
+                               timeout=SUBPROCESS_TIMEOUT)
         finally:
             os.unlink(text_path)
 
@@ -72,13 +79,11 @@ class PiperTTS(TTSEngine):
 
         voice2 = _resolve_piper_model(voice2)
 
-        # Parse script into segments
         segments = _parse_two_host_script(script)
         if not segments:
             self.synthesize(script, output_path)
             return
 
-        # Synthesize each segment with the appropriate voice
         from pydub import AudioSegment
         combined = AudioSegment.empty()
         temp_files = []
@@ -101,13 +106,13 @@ class PiperTTS(TTSEngine):
                         "--length-scale", str(1.0 / self.speed),
                     ]
                     with open(text_path) as stdin:
-                        subprocess.run(cmd, stdin=stdin, check=True, capture_output=True)
+                        subprocess.run(cmd, stdin=stdin, check=True, capture_output=True,
+                                       timeout=SUBPROCESS_TIMEOUT)
                 finally:
                     os.unlink(text_path)
 
                 segment_audio = AudioSegment.from_wav(temp_path)
                 combined += segment_audio
-                # Small pause between speakers
                 combined += AudioSegment.silent(duration=300)
 
             combined.export(output_path, format="wav")
@@ -120,16 +125,14 @@ class PiperTTS(TTSEngine):
 class MacOSSay(TTSEngine):
     """macOS built-in say command — zero setup fallback."""
 
-    def __init__(self, voice: str = "Samantha", speed: float = 1.0):
+    def __init__(self, voice: str = "Daniel", speed: float = 1.0):
         self.voice = voice
         # macOS say uses words per minute, default ~175
         self.rate = int(175 * speed)
 
     def synthesize(self, text: str, output_path: str) -> None:
-        # macOS say outputs AIFF, we'll convert to WAV
         aiff_path = output_path.replace(".wav", ".aiff")
 
-        # Write text to temp file to avoid shell argument length limits
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write(text)
             text_path = f.name
@@ -137,24 +140,21 @@ class MacOSSay(TTSEngine):
         try:
             subprocess.run(
                 ["say", "-v", self.voice, "-r", str(self.rate), "-o", aiff_path, "-f", text_path],
-                check=True,
-                capture_output=True,
+                check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
             )
         finally:
             os.unlink(text_path)
 
-        # Convert to WAV using ffmpeg
         subprocess.run(
             ["ffmpeg", "-y", "-i", aiff_path, output_path],
-            check=True,
-            capture_output=True,
+            check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
         )
         if os.path.exists(aiff_path):
             os.unlink(aiff_path)
 
     def synthesize_two_host(self, script: str, output_path: str, voice2: str | None = None) -> None:
         if not voice2:
-            voice2 = "Daniel"  # Default second macOS voice
+            voice2 = "Daniel"
 
         segments = _parse_two_host_script(script)
         if not segments:
@@ -181,15 +181,13 @@ class MacOSSay(TTSEngine):
                 try:
                     subprocess.run(
                         ["say", "-v", voice, "-r", str(self.rate), "-o", aiff_path, "-f", seg_text_path],
-                        check=True,
-                        capture_output=True,
+                        check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
                     )
                 finally:
                     os.unlink(seg_text_path)
                 subprocess.run(
                     ["ffmpeg", "-y", "-i", aiff_path, temp_path],
-                    check=True,
-                    capture_output=True,
+                    check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
                 )
 
                 segment_audio = AudioSegment.from_wav(temp_path)
@@ -237,6 +235,11 @@ def get_tts_engine(config: dict) -> TTSEngine:
     speed = tts_cfg.get("speed", 1.0)
 
     if engine_name == "macos_say":
+        if sys.platform != "darwin":
+            from fileio.progress import console
+            console.print("[bold red]Error:[/bold red] macos_say TTS engine is only available on macOS.")
+            console.print("Change tts.engine to 'piper' in podcast_config.yaml.")
+            sys.exit(1)
         return MacOSSay(voice=voice, speed=speed)
     else:
         return PiperTTS(voice=voice, speed=speed)
