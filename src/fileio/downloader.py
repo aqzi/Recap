@@ -43,7 +43,7 @@ def download_youtube_audio(url: str, data_dir: str = "data") -> tuple[str, str]:
     audio_file = os.path.join(data_dir, safe_title + ".mp3")
 
     # yt-dlp uses the raw title for the filename; rename to sanitized version
-    raw_file = os.path.join(data_dir, sanitize_filename(info.get("title", "video")) + ".mp3")
+    raw_file = os.path.join(data_dir, title + ".mp3")
     if not os.path.isfile(audio_file) and os.path.isfile(raw_file):
         os.rename(raw_file, audio_file)
 
