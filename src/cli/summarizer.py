@@ -5,7 +5,6 @@ from core.chunker import chunk_transcript
 from core.knowledge_base import init_kb
 from core.llm import (
     consolidate_summaries,
-    enhance_with_kb,
     summarize_chunk,
 )
 from core.transcriber import transcribe, parse_transcript, _USE_MLX
@@ -15,7 +14,7 @@ from utils.validation import check_audio_file, check_llm_model
 
 
 def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_minutes,
-                   kb_dir=None, kb_rebuild=False, embedding_model=None, context=None,
+                   kb_dir=None, kb_rebuild=False, embedding_model=None, hint=None,
                    transcript=None):
     """Run the audio summarization pipeline."""
     if not audio_file and not transcript:
@@ -35,8 +34,8 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
     from core.llm import detect_provider
     provider = detect_provider(llm_model)
     console.print(f"  LLM:      {llm_model} ({provider})")
-    if context:
-        console.print(f"  Context:  {context}")
+    if hint:
+        console.print(f"  Hint:     {hint}")
     if kb_dir:
         console.print(f"  KB:       {kb_dir}")
 
@@ -85,8 +84,13 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
         task_summarize = progress.add_task("Summarizing chunks...", total=len(chunks))
         chunk_summaries = []
         for i, chunk in enumerate(chunks):
+            chunk_kb = kb.retrieve(chunk["text"], top_k=3, max_chars=1500) if kb else None
+            chunk_kb = chunk_kb or None
             try:
-                summary = summarize_chunk(chunk, i, len(chunks), llm_model, context=context)
+                summary = summarize_chunk(
+                    chunk, i, len(chunks), llm_model,
+                    hint=hint, kb_context=chunk_kb,
+                )
                 chunk_summaries.append(summary)
             except Exception as e:
                 console.print(f"\n[bold red]Error:[/bold red] Summarization failed on chunk {i + 1}: {e}")
@@ -96,26 +100,22 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
             progress.update(task_summarize, advance=1)
 
         task_consolidate = progress.add_task("Consolidating summary...", total=1)
+        consolidation_kb = (
+            kb.retrieve_multi(chunk_summaries, top_k_per_query=3, max_chars=3000)
+            if kb else None
+        )
+        consolidation_kb = consolidation_kb or None
         try:
-            final_summary = consolidate_summaries(chunk_summaries, llm_model, context=context)
+            final_summary = consolidate_summaries(
+                chunk_summaries, llm_model,
+                hint=hint, kb_context=consolidation_kb,
+            )
         except Exception as e:
             console.print(f"\n[bold red]Error:[/bold red] Consolidation failed: {e}")
             if kb:
                 kb.close()
             sys.exit(1)
         progress.update(task_consolidate, advance=1)
-
-        if kb:
-            task_enhance = progress.add_task("Enhancing with KB context...", total=1)
-            kb_context = kb.retrieve(final_summary, top_k=5, max_chars=6000)
-            if kb_context:
-                try:
-                    final_summary = enhance_with_kb(final_summary, kb_context, llm_model)
-                except Exception as e:
-                    console.print(f"\n[bold red]Error:[/bold red] KB enhancement failed: {e}")
-                    kb.close()
-                    sys.exit(1)
-            progress.update(task_enhance, advance=1)
 
         if transcript:
             task_write = progress.add_task("Writing output files...", total=1)

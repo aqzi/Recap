@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 from core.prompts import (
     ARTICLE_RANKING_SYSTEM,
-    KB_ENHANCE_PODCAST_SYSTEM,
     SOLO_SCRIPT_SYSTEM,
     TWO_HOST_SCRIPT_SYSTEM,
     article_ranking_prompt,
@@ -17,9 +16,6 @@ from core.prompts import (
     chunk_summary_system,
     consolidation_prompt,
     consolidation_system,
-    kb_enhance_podcast_prompt,
-    kb_enhance_prompt,
-    kb_enhance_system,
     solo_script_prompt,
     two_host_script_prompt,
 )
@@ -94,24 +90,18 @@ def call_llm(
 
 def summarize_chunk(
     chunk: dict, chunk_index: int, total_chunks: int, llm_model: str,
-    context: str | None = None,
+    hint: str | None = None, kb_context: str | None = None,
 ) -> str:
     prompt = chunk_summary_prompt(chunk, chunk_index, total_chunks)
-    return call_llm(prompt, chunk_summary_system(context), llm_model)
+    return call_llm(prompt, chunk_summary_system(hint, kb_context=kb_context), llm_model)
 
 
 def consolidate_summaries(
     chunk_summaries: list[str], llm_model: str,
-    context: str | None = None,
+    hint: str | None = None, kb_context: str | None = None,
 ) -> str:
     prompt = consolidation_prompt(chunk_summaries)
-    return call_llm(prompt, consolidation_system(context), llm_model, num_ctx=16384)
-
-
-def enhance_with_kb(summary: str, kb_context: str, llm_model: str) -> str:
-    """Enhance a summary with knowledge base context (second pass)."""
-    prompt = kb_enhance_prompt(summary, kb_context)
-    return call_llm(prompt, kb_enhance_system(), llm_model, num_ctx=16384)
+    return call_llm(prompt, consolidation_system(hint, kb_context=kb_context), llm_model, num_ctx=16384)
 
 
 # --- Podcast functions ---
@@ -139,19 +129,12 @@ def rank_articles(
 
 def generate_podcast_script(
     articles: list[dict], interests: str, style: str, target_length: str, llm_model: str,
+    kb_context: str | None = None,
 ) -> str:
     """Generate a podcast script in solo or two_host style."""
     if style == "two_host":
-        prompt = two_host_script_prompt(articles, interests, target_length)
+        prompt = two_host_script_prompt(articles, interests, target_length, kb_context=kb_context)
         return call_llm(prompt, TWO_HOST_SCRIPT_SYSTEM, llm_model, num_ctx=16384)
     else:
-        prompt = solo_script_prompt(articles, interests, target_length)
+        prompt = solo_script_prompt(articles, interests, target_length, kb_context=kb_context)
         return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384)
-
-
-def enhance_podcast_with_kb(
-    script: str, kb_context: str, style: str, llm_model: str,
-) -> str:
-    """Enhance a podcast script with knowledge base context (second pass)."""
-    prompt = kb_enhance_podcast_prompt(script, kb_context, style)
-    return call_llm(prompt, KB_ENHANCE_PODCAST_SYSTEM, llm_model, num_ctx=16384)

@@ -124,12 +124,12 @@ def interactive_mode():
                     break
                 console.print(f"  [red]File not found:[/red] {audio_file}")
 
-    # Context (for summarizer mode)
-    context = None
+    # Hint (for summarizer mode)
+    hint = None
     if mode == "1":
-        ctx_input = Prompt.ask("Context (e.g. 'team meeting', 'lecture', empty to skip)", default="")
-        if ctx_input:
-            context = ctx_input
+        hint_input = Prompt.ask("Hint (e.g. 'team meeting', 'lecture', empty to skip)", default="")
+        if hint_input:
+            hint = hint_input
 
     # Defaults
     whisper_model = "medium"
@@ -185,5 +185,5 @@ def interactive_mode():
         from cli.summarizer import run_summarizer
         run_summarizer(audio_file, whisper_model, output_dir, llm_model,
                        language, chunk_minutes, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
-                       embedding_model=embedding_model, context=context,
+                       embedding_model=embedding_model, hint=hint,
                        transcript=transcript)

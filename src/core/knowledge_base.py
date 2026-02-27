@@ -106,11 +106,12 @@ class KnowledgeBase:
             return info.points_count or 0
         return 0
 
-    def retrieve(self, query: str, top_k: int = 5, max_chars: int = 4500) -> str:
+    def retrieve(self, query: str, top_k: int = 5, max_chars: int = 4500,
+                 min_score: float = 0.4) -> str:
         """Query Qdrant for the most relevant KB chunks.
 
         Returns a formatted context string, truncated to max_chars.
-        Returns empty string if KB is empty or no results found.
+        Returns empty string if KB is empty or no results pass min_score.
         """
         if not self.is_indexed():
             return ""
@@ -124,9 +125,60 @@ class KnowledgeBase:
         if not results:
             return ""
 
+        results = [p for p in results if p.score >= min_score]
+        if not results:
+            return ""
+
         parts = []
         total_chars = 0
         for point in results:
+            source = point.metadata.get("source", "unknown")
+            text = point.document
+            part = f"[From: {source}]\n{text}"
+
+            if total_chars + len(part) > max_chars:
+                remaining = max_chars - total_chars
+                if remaining > 100:
+                    parts.append(part[:remaining] + "...")
+                break
+
+            parts.append(part)
+            total_chars += len(part)
+
+        return "\n\n".join(parts)
+
+    def retrieve_multi(self, queries: list[str], top_k_per_query: int = 3,
+                       max_chars: int = 4500, min_score: float = 0.4) -> str:
+        """Query KB with multiple queries, deduplicate, and return top results.
+
+        Returns a formatted context string, or empty string if nothing relevant.
+        """
+        if not self.is_indexed():
+            return ""
+
+        # Collect best score per point ID across all queries
+        best: dict[str | int, tuple[float, object]] = {}
+        for query in queries:
+            results = self.client.query(
+                collection_name=self.collection,
+                query_text=query,
+                limit=top_k_per_query,
+            )
+            for point in results:
+                pid = point.id
+                if pid not in best or point.score > best[pid][0]:
+                    best[pid] = (point.score, point)
+
+        # Filter by min_score and sort descending
+        scored = [(score, point) for score, point in best.values() if score >= min_score]
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        if not scored:
+            return ""
+
+        parts = []
+        total_chars = 0
+        for _score, point in scored:
             source = point.metadata.get("source", "unknown")
             text = point.document
             part = f"[From: {source}]\n{text}"

@@ -76,33 +76,33 @@ def _apply_llm_config_to_env(llm_config: dict) -> None:
 @click.argument("audio_file", required=False, type=click.Path(exists=True))
 @click.option("--podcast", is_flag=True, default=False, help="Generate a podcast from your interests.")
 @click.option(
-    "--model", "-m",
+    "--model",
     type=click.Choice(["tiny", "base", "small", "medium", "large-v2", "large-v3"]),
     default="medium", help="Whisper model size. Default: medium.",
 )
-@click.option("--output-dir", "-o", type=click.Path(), default=None, help="Directory for output files.")
+@click.option("--output-dir", type=click.Path(), default=None, help="Directory for output files.")
 @click.option("--llm-model", default=None,
               help="LLM model. Supports Ollama, OpenAI (gpt-*), Anthropic (claude-*). Default from config.yaml.")
 @click.option(
-    "--language", "-l",
+    "--language",
     type=click.Choice(["auto", "nl", "en"]),
     default="auto", help="Audio language. Default: auto.",
 )
 @click.option("--chunk-minutes", type=int, default=10, help="Chunk size in minutes. Default: 10.")
 @click.option("--kb", type=click.Path(exists=True, file_okay=False),
-              default=None, help="Knowledge base directory for context-aware summaries.")
+              default=None, help="Directory of reference docs for domain-aware summaries (RAG).")
 @click.option("--kb-rebuild", is_flag=True, default=False,
               help="Force re-index the knowledge base (use when KB files changed).")
 @click.option("--embedding-model", default=None,
               help="Fastembed model for KB embeddings. Default: BAAI/bge-small-en-v1.5.")
-@click.option("--context", "-c", default=None,
-              help="Additional context about the audio (e.g., 'team meeting', 'university lecture').")
+@click.option("--hint", default=None,
+              help="Short label for the audio type (e.g., 'team meeting', 'lecture'). Guides tone/structure.")
 @click.option("--record", "record_flag", is_flag=True, default=False, help="Record audio from an input device.")
 @click.option("--record-name", default=None, help="Optional name for the recording file.")
-@click.option("--transcript", "-t", type=click.Path(exists=True),
+@click.option("--transcript", type=click.Path(exists=True),
               default=None, help="Transcript file (.md) to summarize.")
 def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minutes, kb, kb_rebuild,
-         embedding_model, context, record_flag, record_name, transcript):
+         embedding_model, hint, record_flag, record_name, transcript):
     """Transcribe and summarize audio, generate podcasts, or record audio.
 
     \b
@@ -150,7 +150,7 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
     else:
         from cli.summarizer import run_summarizer
         run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_minutes,
-                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model, context=context,
+                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model, hint=hint,
                        transcript=transcript)
 
 

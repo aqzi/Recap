@@ -1,19 +1,33 @@
 from utils.formatting import format_timestamp
 
 
-def _context_line(context: str | None) -> str:
-    """Return a context instruction line for system prompts, or empty string."""
-    if context:
-        return f"\nAdditional context about this audio: {context}"
+def _hint_line(hint: str | None) -> str:
+    """Return a hint instruction line for system prompts, or empty string."""
+    if hint:
+        return f"\nAdditional context about this audio: {hint}"
     return ""
 
 
-def chunk_summary_system(context: str | None = None) -> str:
+def _kb_context_block(kb_context: str | None) -> str:
+    """Return a KB reference block for system prompts, or empty string."""
+    if kb_context:
+        return (
+            "\n\nBACKGROUND REFERENCE (from knowledge base):\n"
+            "Use this ONLY to understand domain-specific terms, acronyms, and context "
+            "that appear in the input. Do not add topics, claims, or information from "
+            "this reference that are not discussed in the input. If none of it relates "
+            "to the input, ignore it entirely.\n"
+            f"{kb_context}"
+        )
+    return ""
+
+
+def chunk_summary_system(hint: str | None = None, kb_context: str | None = None) -> str:
     return f"""\
 You are an audio analyst. You produce concise, accurate summaries of audio transcript segments.
 Focus on key topics discussed, decisions made, action items mentioned, and important statements.
 Do not invent information. If the transcript is unclear, say so.
-IMPORTANT: Always write your response in English, even if the transcript is in another language.{_context_line(context)}"""
+IMPORTANT: Always write your response in English, even if the transcript is in another language.{_hint_line(hint)}{_kb_context_block(kb_context)}"""
 
 
 def chunk_summary_prompt(
@@ -36,11 +50,11 @@ Provide a structured summary with:
 - **Action Items**: Tasks or follow-ups mentioned (include who is responsible if mentioned)"""
 
 
-def consolidation_system(context: str | None = None) -> str:
+def consolidation_system(hint: str | None = None, kb_context: str | None = None) -> str:
     return f"""\
 You are an audio analyst. You merge multiple segment summaries into a single coherent \
 summary. Produce a concise, well-structured document — keep all sections short and to the point.
-IMPORTANT: Always write your response in English, even if the original audio was in another language.{_context_line(context)}"""
+IMPORTANT: Always write your response in English, even if the original audio was in another language.{_hint_line(hint)}{_kb_context_block(kb_context)}"""
 
 
 def consolidation_prompt(chunk_summaries: list[str]) -> str:
@@ -76,39 +90,6 @@ Produce a final summary in this format:
 
 ## Action Items
 (Bulleted list: task, responsible person if known, deadline if mentioned — omit this section entirely if there are no action items)"""
-
-
-def kb_enhance_system() -> str:
-    return """\
-You are an audio analyst. You enhance existing summaries by adding domain-specific \
-nuance and connections from a private knowledge base.
-CRITICAL RULES:
-- The original summary content is the ground truth. Do NOT remove, replace, or contradict anything from it.
-- Only ADD nuance, clarify terminology, or note connections where the knowledge base is clearly relevant.
-- If the knowledge base context has NO meaningful connection to the summary content, return the summary UNCHANGED.
-- Keep the exact same structure and format as the original summary.
-- Keep it concise — do not make the summary significantly longer.
-IMPORTANT: Always write your response in English."""
-
-
-def kb_enhance_prompt(summary: str, kb_context: str) -> str:
-    return f"""\
-Below is a summary followed by excerpts from a private knowledge base.
-
-Your task: enhance the summary by weaving in relevant context from the knowledge base — \
-but ONLY where there is a genuine connection. Add brief clarifications, terminology links, \
-or contextual notes within the existing sections. Do not add new sections or topics that \
-were not discussed in the original audio.
-
-If the knowledge base content is unrelated to the summary, return the original summary exactly as-is.
-
-SUMMARY:
-{summary}
-
-KNOWLEDGE BASE CONTEXT:
-{kb_context}
-
-Return the enhanced summary, keeping the same markdown structure and format."""
 
 
 # --- Podcast prompts ---
@@ -155,12 +136,15 @@ and symbols where needed (e.g. write "number one" not "1.", write "about 50 perc
 
 def solo_script_prompt(
     articles: list[dict], interests: str, target_length: str,
+    kb_context: str | None = None,
 ) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
     article_blocks = "\n\n---\n\n".join(
         f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
         for a in articles
     )
+
+    kb_section = _kb_context_block(kb_context) if kb_context else ""
 
     return f"""\
 Write a podcast script (~{word_target} words) covering the following articles. \
@@ -171,7 +155,7 @@ LISTENER INTERESTS:
 
 ARTICLES:
 {article_blocks}
-
+{kb_section}
 Write a natural, engaging script for a single host. Cover the most interesting stories, \
 explain why they matter, and connect them to the listener's interests where relevant.
 Remember: plain spoken text only, no markdown, no special symbols, no lists."""
@@ -190,12 +174,15 @@ and symbols where needed (e.g. write "number one" not "1.", write "about 50 perc
 
 def two_host_script_prompt(
     articles: list[dict], interests: str, target_length: str,
+    kb_context: str | None = None,
 ) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
     article_blocks = "\n\n---\n\n".join(
         f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
         for a in articles
     )
+
+    kb_section = _kb_context_block(kb_context) if kb_context else ""
 
     return f"""\
 Write a two-host podcast script (~{word_target} words) covering the following articles. \
@@ -206,47 +193,10 @@ LISTENER INTERESTS:
 
 ARTICLES:
 {article_blocks}
-
+{kb_section}
 Write a natural conversation between ALEX and SAM. Alex introduces topics, Sam adds depth. \
 They discuss the most interesting stories, debate implications, and connect them to the \
 listener's interests. Every line MUST start with "ALEX:" or "SAM:".
 Remember: plain spoken text only, no markdown, no special symbols, no lists."""
 
 
-KB_ENHANCE_PODCAST_SYSTEM = """\
-You are a podcast script editor. You enhance existing podcast scripts by weaving in \
-relevant background context from the listener's private knowledge base.
-CRITICAL RULES:
-- The original script is the primary content. Do NOT remove or replace any of it.
-- Only ADD brief remarks, connections, or context where the knowledge base is clearly relevant \
-to topics already discussed in the script.
-- If the knowledge base has NO meaningful connection to the script, return the script UNCHANGED.
-- Preserve the exact format: plain spoken text, no markdown, no special symbols.
-IMPORTANT: Always write in English."""
-
-
-def kb_enhance_podcast_prompt(script: str, kb_context: str, style: str) -> str:
-    if style == "two_host":
-        format_note = ("Keep every line prefixed with \"ALEX:\" or \"SAM:\". "
-                       "Add KB-informed remarks as natural dialogue exchanges.")
-    else:
-        format_note = "Keep the single-host narrative style."
-
-    return f"""\
-Below is a podcast script followed by excerpts from the listener's private knowledge base.
-
-Your task: enhance the script by weaving in relevant knowledge base context — but ONLY where \
-there is a genuine connection to topics already discussed. Add brief contextual remarks, \
-connections to the listener's work, or deeper background where it fits naturally.
-
-If the knowledge base content is unrelated to the script topics, return the script exactly as-is.
-
-PODCAST SCRIPT:
-{script}
-
-KNOWLEDGE BASE CONTEXT:
-{kb_context}
-
-{format_note}
-Remember: plain spoken text only, no markdown formatting, no special symbols, no lists.
-Return the enhanced script."""

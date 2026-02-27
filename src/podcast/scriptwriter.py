@@ -1,6 +1,6 @@
 import os
 
-from core.llm import enhance_podcast_with_kb, generate_podcast_script, rank_articles
+from core.llm import generate_podcast_script, rank_articles
 from podcast.fetcher import extract_article_text, fetch_rss_articles, search_web_articles
 
 
@@ -62,19 +62,18 @@ def generate_podcast(
         article["content"] = text or article.get("summary", "")
         progress.advance(task_extract)
 
-    # Stage 4: Generate script
+    # Stage 4: Generate script (with early KB injection if available)
     task_script = progress.add_task("Writing podcast script...", total=1)
-    script = generate_podcast_script(selected, interests, style, target_length, llm_model)
-    progress.update(task_script, completed=1)
-
-    # Stage 5: Enhance script with KB context (if available)
+    script_kb = None
     if kb:
-        task_enhance = progress.add_task("Enhancing with KB context...", total=1)
-        article_texts = " ".join(a.get("content", a.get("summary", "")) for a in selected)
-        kb_context = kb.retrieve(article_texts, top_k=5, max_chars=6000)
-        if kb_context:
-            script = enhance_podcast_with_kb(script, kb_context, style, llm_model)
-        progress.update(task_enhance, completed=1)
+        article_queries = [a.get("content", a.get("summary", ""))[:1000] for a in selected]
+        script_kb = kb.retrieve_multi(article_queries, top_k_per_query=3, max_chars=3000)
+        script_kb = script_kb or None
+    script = generate_podcast_script(
+        selected, interests, style, target_length, llm_model,
+        kb_context=script_kb,
+    )
+    progress.update(task_script, completed=1)
 
     # Build sources markdown
     sources_md = "# Podcast Sources\n\n"

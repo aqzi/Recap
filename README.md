@@ -29,12 +29,12 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ```bash
 python src/main.py meeting.mp3
-python src/main.py meeting.mp3 --context "team standup meeting"
+python src/main.py meeting.mp3 --hint "team standup meeting"
 ```
 
 Output: `output/meeting/transcript.md`, `summary.md`
 
-Use `--context` to tell the summarizer what kind of audio it is (e.g., "team meeting", "university lecture", "interview"). This helps produce more relevant summaries.
+Use `--hint` to tell the summarizer what kind of audio it is (e.g., "team meeting", "university lecture", "interview"). This is a short label that guides tone and structure — it doesn't add domain knowledge (use `--kb` for that).
 
 #### Resume from an existing transcript
 
@@ -42,7 +42,7 @@ You can skip re-transcription by passing the transcript file directly:
 
 ```bash
 python src/main.py --transcript output/meeting/transcript.md
-python src/main.py -t output/meeting/transcript.md --context "team standup meeting"
+python src/main.py --transcript output/meeting/transcript.md --hint "team standup meeting"
 ```
 
 ### 2. Generate a podcast
@@ -88,18 +88,18 @@ Then open **Audio MIDI Setup**, click `+` to create a **Multi-Output Device** th
 
 ```
 AUDIO_FILE             Path to audio file (optional)
---transcript, -t       Transcript file (.md) to summarize
+--transcript           Transcript file (.md) to summarize
 --podcast              Generate a podcast from your interests
 --record               Record audio from an input device
 --record-name          Optional name for the recording file
---context, -c          Additional context about the audio (e.g., 'team meeting', 'lecture')
---kb                   Knowledge base directory for context-aware summaries
+--hint                 Short label for audio type (e.g., 'team meeting', 'lecture') — guides tone
+--kb                   Directory of reference docs for domain-aware summaries (RAG)
 --kb-rebuild           Force re-index the knowledge base
 --embedding-model      Fastembed model for KB embeddings (default: BAAI/bge-small-en-v1.5)
---model, -m            Whisper model size (default: medium)
---output-dir, -o       Output directory (default: output/<name>/)
+--model                Whisper model size (default: medium)
+--output-dir           Output directory (default: output/<name>/)
 --llm-model            LLM model — Ollama, OpenAI (gpt-*), Anthropic (claude-*). Default from config.yaml
---language, -l         Audio language: auto, nl, en (default: auto)
+--language             Audio language: auto, nl, en (default: auto)
 --chunk-minutes        Chunk size in minutes (default: 10)
 ```
 
@@ -129,7 +129,7 @@ python src/main.py meeting.mp3 --kb ./my_docs/
 python src/main.py --podcast --kb ./my_docs/
 ```
 
-For audio summaries, relevant KB content is injected into the summarization prompts. For podcasts, fetched articles are discussed in the context of your knowledge base.
+KB content is used as background reference during summarization — it helps the LLM understand domain-specific terms, acronyms, and context, but doesn't steer or add to the output. Only chunks that score above a relevance threshold are included.
 
 Supported formats: `.txt`, `.md`, `.pdf`, `.docx`, `.html`, `.csv`
 
