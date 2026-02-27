@@ -36,6 +36,15 @@ Output: `output/meeting/transcript.md`, `summary.md`
 
 Use `--context` to tell the summarizer what kind of audio it is (e.g., "team meeting", "university lecture", "interview"). This helps produce more relevant summaries.
 
+#### Resume from an existing transcript
+
+You can skip re-transcription by passing the transcript file directly:
+
+```bash
+python src/main.py --transcript output/meeting/transcript.md
+python src/main.py -t output/meeting/transcript.md --context "team standup meeting"
+```
+
 ### 2. Generate a podcast
 
 ```bash
@@ -79,6 +88,7 @@ Then open **Audio MIDI Setup**, click `+` to create a **Multi-Output Device** th
 
 ```
 AUDIO_FILE             Path to audio file (optional)
+--transcript, -t       Transcript file (.md) to summarize
 --podcast              Generate a podcast from your interests
 --record               Record audio from an input device
 --record-name          Optional name for the recording file

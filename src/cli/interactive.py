@@ -100,14 +100,29 @@ def interactive_mode():
         run_recorder(out_input or None, rec_name or None)
         return
 
-    # Audio file input
+    # Audio/transcript input
     audio_file = None
+    transcript = None
     if mode == "1":
-        while True:
-            audio_file = Prompt.ask("Path to audio file")
-            if os.path.isfile(audio_file):
-                break
-            console.print(f"  [red]File not found:[/red] {audio_file}")
+        console.print()
+        console.print("  Input type:")
+        console.print("    [bold cyan][1][/bold cyan] Audio file")
+        console.print("    [bold cyan][2][/bold cyan] Existing transcript")
+        console.print()
+        input_type = Prompt.ask("Select input type", choices=["1", "2"], default="1")
+
+        if input_type == "2":
+            while True:
+                transcript = Prompt.ask("Path to transcript file (.md)")
+                if os.path.isfile(transcript):
+                    break
+                console.print(f"  [red]File not found:[/red] {transcript}")
+        else:
+            while True:
+                audio_file = Prompt.ask("Path to audio file")
+                if os.path.isfile(audio_file):
+                    break
+                console.print(f"  [red]File not found:[/red] {audio_file}")
 
     # Context (for summarizer mode)
     context = None
@@ -133,7 +148,7 @@ def interactive_mode():
     customize = Confirm.ask("Customize other settings?", default=False)
 
     if customize:
-        if mode == "1":
+        if mode == "1" and not transcript:
             whisper_model = Prompt.ask(
                 f"Whisper model ({', '.join(WHISPER_MODELS)})",
                 choices=WHISPER_MODELS, default="medium",
@@ -170,4 +185,5 @@ def interactive_mode():
         from cli.summarizer import run_summarizer
         run_summarizer(audio_file, whisper_model, output_dir, llm_model,
                        language, chunk_minutes, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
-                       embedding_model=embedding_model, context=context)
+                       embedding_model=embedding_model, context=context,
+                       transcript=transcript)

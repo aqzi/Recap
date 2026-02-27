@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 
 # --------------- backend detection ---------------
@@ -94,6 +95,45 @@ def _transcribe_mlx(audio_file, model_size, language, progress, task_id):
     return segments, duration
 
 # --------------- public API ---------------
+
+
+def parse_transcript(path: str) -> list[dict]:
+    """Parse a transcript file and return segments in the same format as transcribe().
+
+    Supports the markdown format written by write_transcript():
+        **[H:MM:SS]** text   or   **[M:SS]** text
+
+    Plain text files (no timestamps) are treated as a single segment starting at 0.
+    """
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+
+    pattern = re.compile(r"\*\*\[(\d+(?::\d{2}){1,2})\]\*\*\s+(.+)")
+    matches = pattern.findall(content)
+
+    if not matches:
+        # Plain text fallback — single segment
+        text = content.strip()
+        if text:
+            return [{"start": 0.0, "end": 1.0, "text": text}]
+        return []
+
+    segments = []
+    for ts_str, text in matches:
+        parts = ts_str.split(":")
+        if len(parts) == 3:
+            seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        else:
+            seconds = int(parts[0]) * 60 + int(parts[1])
+        segments.append({"start": float(seconds), "end": 0.0, "text": text.strip()})
+
+    # Fill in end times: each segment ends when the next one starts
+    for i in range(len(segments) - 1):
+        segments[i]["end"] = segments[i + 1]["start"]
+    if segments:
+        segments[-1]["end"] = segments[-1]["start"] + 1.0
+
+    return segments
 
 
 def transcribe(audio_file: str, model_size: str, language: str | None, progress, task_id):

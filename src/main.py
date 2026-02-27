@@ -99,13 +99,16 @@ def _apply_llm_config_to_env(llm_config: dict) -> None:
               help="Additional context about the audio (e.g., 'team meeting', 'university lecture').")
 @click.option("--record", "record_flag", is_flag=True, default=False, help="Record audio from an input device.")
 @click.option("--record-name", default=None, help="Optional name for the recording file.")
+@click.option("--transcript", "-t", type=click.Path(exists=True),
+              default=None, help="Transcript file (.md) to summarize.")
 def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minutes, kb, kb_rebuild,
-         embedding_model, context, record_flag, record_name):
+         embedding_model, context, record_flag, record_name, transcript):
     """Transcribe and summarize audio, generate podcasts, or record audio.
 
     \b
     Modes:
       AUDIO_FILE                  Summarize a local audio file
+      --transcript FILE           Summarize an existing transcript
       --podcast                   Generate a podcast from your interests
       --record                    Record audio from an input device
     """
@@ -114,7 +117,12 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
         run_recorder(output_dir, record_name)
         return
 
-    if not audio_file and not podcast:
+    if audio_file and transcript:
+        console.print("[bold red]Error:[/bold red] Cannot use both an audio file and --transcript at the same time.")
+        import sys
+        sys.exit(1)
+
+    if not audio_file and not podcast and not transcript:
         from cli.interactive import interactive_mode
         interactive_mode()
         return
@@ -142,7 +150,8 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
     else:
         from cli.summarizer import run_summarizer
         run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_minutes,
-                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model, context=context)
+                       kb_dir=kb, kb_rebuild=kb_rebuild, embedding_model=embedding_model, context=context,
+                       transcript=transcript)
 
 
 if __name__ == "__main__":

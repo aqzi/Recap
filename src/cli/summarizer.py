@@ -8,29 +8,33 @@ from core.llm import (
     enhance_with_kb,
     summarize_chunk,
 )
-from core.transcriber import transcribe, _USE_MLX
+from core.transcriber import transcribe, parse_transcript, _USE_MLX
 from fileio.progress import console, create_progress
 from fileio.writer import write_summary, write_transcript
 from utils.validation import check_audio_file, check_llm_model
 
 
 def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_minutes,
-                   kb_dir=None, kb_rebuild=False, embedding_model=None, context=None):
+                   kb_dir=None, kb_rebuild=False, embedding_model=None, context=None,
+                   transcript=None):
     """Run the audio summarization pipeline."""
-    if not audio_file:
-        console.print("[bold red]Error:[/bold red] Provide an audio file or use --podcast.")
+    if not audio_file and not transcript:
+        console.print("[bold red]Error:[/bold red] Provide an audio file, --transcript, or use --podcast.")
         sys.exit(1)
 
-    console.print("[bold]Audio Summarizer[/bold]")
+    if transcript:
+        console.print("[bold]Transcript Summarizer[/bold]")
+        console.print(f"  Transcript: {transcript}")
+    else:
+        console.print("[bold]Audio Summarizer[/bold]")
+        backend = "mlx-whisper (GPU)" if _USE_MLX else "faster-whisper (CPU)"
+        console.print(f"  Audio:    {audio_file}")
+        console.print(f"  Whisper:  {model} — {backend}")
+        console.print(f"  Language: {language}")
 
-    backend = "mlx-whisper (GPU)" if _USE_MLX else "faster-whisper (CPU)"
-
-    console.print(f"  Audio:    {audio_file}")
-    console.print(f"  Whisper:  {model} — {backend}")
     from core.llm import detect_provider
     provider = detect_provider(llm_model)
     console.print(f"  LLM:      {llm_model} ({provider})")
-    console.print(f"  Language: {language}")
     if context:
         console.print(f"  Context:  {context}")
     if kb_dir:
@@ -38,11 +42,13 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
 
     if output_dir is None:
         from main import derive_output_dir
-        output_dir = derive_output_dir(audio_file)
+        source = audio_file if audio_file else transcript
+        output_dir = derive_output_dir(source)
     console.print(f"  Output:   {output_dir}")
     console.print()
 
-    check_audio_file(audio_file)
+    if not transcript:
+        check_audio_file(audio_file)
     check_llm_model(llm_model)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -53,14 +59,19 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
         if kb_dir:
             kb = init_kb(kb_dir, kb_rebuild, embedding_model, progress, console)
 
-        task_transcribe = progress.add_task("Transcribing audio...", total=None)
-        try:
-            segments, duration = transcribe(audio_file, model, lang, progress, task_transcribe)
-        except Exception as e:
-            console.print(f"\n[bold red]Error:[/bold red] Transcription failed: {e}")
-            if kb:
-                kb.close()
-            sys.exit(1)
+        if transcript:
+            task_parse = progress.add_task("Parsing transcript...", total=1)
+            segments = parse_transcript(transcript)
+            progress.update(task_parse, advance=1)
+        else:
+            task_transcribe = progress.add_task("Transcribing audio...", total=None)
+            try:
+                segments, duration = transcribe(audio_file, model, lang, progress, task_transcribe)
+            except Exception as e:
+                console.print(f"\n[bold red]Error:[/bold red] Transcription failed: {e}")
+                if kb:
+                    kb.close()
+                sys.exit(1)
 
         if not segments:
             console.print("\n[bold red]Error:[/bold red] No speech detected in the audio file.")
@@ -106,16 +117,22 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
                     sys.exit(1)
             progress.update(task_enhance, advance=1)
 
-        task_write = progress.add_task("Writing output files...", total=2)
-        t_path = write_transcript(segments, output_dir)
-        progress.update(task_write, advance=1)
-        s_path = write_summary(final_summary, output_dir)
-        progress.update(task_write, advance=1)
+        if transcript:
+            task_write = progress.add_task("Writing output files...", total=1)
+            s_path = write_summary(final_summary, output_dir)
+            progress.update(task_write, advance=1)
+        else:
+            task_write = progress.add_task("Writing output files...", total=2)
+            t_path = write_transcript(segments, output_dir)
+            progress.update(task_write, advance=1)
+            s_path = write_summary(final_summary, output_dir)
+            progress.update(task_write, advance=1)
 
     if kb:
         kb.close()
 
     console.print()
     console.print("[bold green]Done![/bold green]")
-    console.print(f"  Transcript: {t_path}")
+    if not transcript:
+        console.print(f"  Transcript: {t_path}")
     console.print(f"  Summary:    {s_path}")
