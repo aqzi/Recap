@@ -1,8 +1,11 @@
 import csv
 import json
+import logging
 import os
 
 from qdrant_client import QdrantClient
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".html", ".htm", ".csv"}
 CHUNK_TARGET_WORDS = 500
@@ -11,10 +14,14 @@ DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 MODEL_META_FILE = "embedding_model.json"
 
 
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_DEFAULT_STORE_PATH = os.path.join(_PROJECT_ROOT, "data", "kb_store")
+
+
 class KnowledgeBase:
     """RAG knowledge base backed by a persistent local Qdrant vector store."""
 
-    def __init__(self, store_path: str = "data/kb_store",
+    def __init__(self, store_path: str = _DEFAULT_STORE_PATH,
                  embedding_model: str = DEFAULT_EMBEDDING_MODEL):
         os.makedirs(store_path, exist_ok=True)
         self.client = QdrantClient(path=store_path)
@@ -106,6 +113,27 @@ class KnowledgeBase:
             return info.points_count or 0
         return 0
 
+    @staticmethod
+    def _format_points(points, max_chars: int) -> str:
+        """Format retrieved points into a context string, truncated to max_chars."""
+        parts = []
+        total_chars = 0
+        for point in points:
+            source = point.metadata.get("source", "unknown")
+            text = point.document
+            part = f"[From: {source}]\n{text}"
+
+            if total_chars + len(part) > max_chars:
+                remaining = max_chars - total_chars
+                if remaining > 100:
+                    parts.append(part[:remaining] + "...")
+                break
+
+            parts.append(part)
+            total_chars += len(part)
+
+        return "\n\n".join(parts)
+
     def retrieve(self, query: str, top_k: int = 5, max_chars: int = 4500,
                  min_score: float = 0.4) -> str:
         """Query Qdrant for the most relevant KB chunks.
@@ -129,23 +157,7 @@ class KnowledgeBase:
         if not results:
             return ""
 
-        parts = []
-        total_chars = 0
-        for point in results:
-            source = point.metadata.get("source", "unknown")
-            text = point.document
-            part = f"[From: {source}]\n{text}"
-
-            if total_chars + len(part) > max_chars:
-                remaining = max_chars - total_chars
-                if remaining > 100:
-                    parts.append(part[:remaining] + "...")
-                break
-
-            parts.append(part)
-            total_chars += len(part)
-
-        return "\n\n".join(parts)
+        return self._format_points(results, max_chars)
 
     def retrieve_multi(self, queries: list[str], top_k_per_query: int = 3,
                        max_chars: int = 4500, min_score: float = 0.4) -> str:
@@ -176,23 +188,7 @@ class KnowledgeBase:
         if not scored:
             return ""
 
-        parts = []
-        total_chars = 0
-        for _score, point in scored:
-            source = point.metadata.get("source", "unknown")
-            text = point.document
-            part = f"[From: {source}]\n{text}"
-
-            if total_chars + len(part) > max_chars:
-                remaining = max_chars - total_chars
-                if remaining > 100:
-                    parts.append(part[:remaining] + "...")
-                break
-
-            parts.append(part)
-            total_chars += len(part)
-
-        return "\n\n".join(parts)
+        return self._format_points([point for _, point in scored], max_chars)
 
     def close(self) -> None:
         """Close the Qdrant client."""
@@ -281,8 +277,16 @@ def _extract_text(filepath: str) -> str | None:
         elif ext == ".csv":
             return _extract_csv(filepath)
     except Exception:
+        logger.warning("Failed to extract text from %s: %s", filepath, _exc_summary())
         return None
     return None
+
+
+def _exc_summary() -> str:
+    """Return a one-line summary of the current exception."""
+    import sys
+    exc = sys.exc_info()[1]
+    return f"{type(exc).__name__}: {exc}" if exc else "unknown error"
 
 
 def _extract_plaintext(filepath: str) -> str:

@@ -29,7 +29,8 @@ DEFAULT_NUM_CTX = 8192
 def detect_provider(model_name: str) -> str:
     """Detect the LLM provider from the model name."""
     lower = model_name.lower()
-    if any(lower.startswith(p) for p in ("gpt-", "o1-", "o3-", "o4-")):
+    openai_prefixes = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
+    if any(lower.startswith(p) for p in openai_prefixes):
         return "openai"
     if lower.startswith("claude-"):
         return "anthropic"
@@ -57,6 +58,7 @@ def call_llm(
     llm_model: str,
     num_ctx: int = DEFAULT_NUM_CTX,
     retries: int = 1,
+    timeout: int = 120,
 ) -> str:
     provider = detect_provider(llm_model)
 
@@ -75,14 +77,16 @@ def call_llm(
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.3,
+                "timeout": timeout,
             }
             if provider == "ollama":
                 kwargs["num_ctx"] = num_ctx
 
             response = litellm.completion(**kwargs)
             return response.choices[0].message.content
-        except Exception:
+        except Exception as e:
             if attempt < retries:
+                logger.warning("LLM call attempt %d/%d failed: %s", attempt + 1, retries + 1, e)
                 time.sleep(2)
                 continue
             raise
@@ -101,7 +105,7 @@ def consolidate_summaries(
     hint: str | None = None, kb_context: str | None = None,
 ) -> str:
     prompt = consolidation_prompt(chunk_summaries)
-    return call_llm(prompt, consolidation_system(hint, kb_context=kb_context), llm_model, num_ctx=16384)
+    return call_llm(prompt, consolidation_system(hint, kb_context=kb_context), llm_model, num_ctx=16384, timeout=300)
 
 
 # --- Podcast functions ---
@@ -118,7 +122,7 @@ def rank_articles(
         # Find the JSON array in the response
         text = response.strip()
         start = text.index("[")
-        end = text.index("]") + 1
+        end = text.rindex("]") + 1
         indices = json.loads(text[start:end])
         # Filter to valid indices
         return [i for i in indices if isinstance(i, int) and 0 <= i < len(articles)][:max_articles]
@@ -134,7 +138,7 @@ def generate_podcast_script(
     """Generate a podcast script in solo or two_host style."""
     if style == "two_host":
         prompt = two_host_script_prompt(articles, interests, target_length, kb_context=kb_context)
-        return call_llm(prompt, TWO_HOST_SCRIPT_SYSTEM, llm_model, num_ctx=16384)
+        return call_llm(prompt, TWO_HOST_SCRIPT_SYSTEM, llm_model, num_ctx=16384, timeout=300)
     else:
         prompt = solo_script_prompt(articles, interests, target_length, kb_context=kb_context)
-        return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384)
+        return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384, timeout=300)

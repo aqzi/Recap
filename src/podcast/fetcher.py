@@ -7,14 +7,19 @@ from ddgs import DDGS
 logger = logging.getLogger(__name__)
 
 
+RSS_FETCH_TIMEOUT = 30
+
+
 def fetch_rss_articles(feed_urls: list[str], max_per_feed: int = 10) -> list[dict]:
     """Fetch recent articles from RSS feeds."""
+    import urllib.request
     articles = []
     seen_urls = set()
 
     for url in feed_urls:
         try:
-            feed = feedparser.parse(url)
+            resp = urllib.request.urlopen(url, timeout=RSS_FETCH_TIMEOUT)
+            feed = feedparser.parse(resp.read())
             for entry in feed.entries[:max_per_feed]:
                 link = entry.get("link", "")
                 if not link or link in seen_urls:

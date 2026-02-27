@@ -86,15 +86,13 @@ class PiperTTS(TTSEngine):
 
         from pydub import AudioSegment
         combined = AudioSegment.empty()
-        temp_files = []
 
-        try:
+        with tempfile.TemporaryDirectory() as tmpdir:
             for i, (speaker, text) in enumerate(segments):
-                temp_path = os.path.join(tempfile.gettempdir(), f"segment_{i}.wav")
-                temp_files.append(temp_path)
+                temp_path = os.path.join(tmpdir, f"segment_{i}.wav")
                 voice = self.voice if speaker == "ALEX" else voice2
 
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, dir=tmpdir) as f:
                     f.write(text)
                     text_path = f.name
 
@@ -116,10 +114,6 @@ class PiperTTS(TTSEngine):
                 combined += AudioSegment.silent(duration=300)
 
             combined.export(output_path, format="wav")
-        finally:
-            for f in temp_files:
-                if os.path.exists(f):
-                    os.unlink(f)
 
 
 class MacOSSay(TTSEngine):
@@ -131,7 +125,7 @@ class MacOSSay(TTSEngine):
         self.rate = int(175 * speed)
 
     def synthesize(self, text: str, output_path: str) -> None:
-        aiff_path = output_path.replace(".wav", ".aiff")
+        aiff_path = str(Path(output_path).with_suffix(".aiff"))
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write(text)
@@ -145,12 +139,14 @@ class MacOSSay(TTSEngine):
         finally:
             os.unlink(text_path)
 
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", aiff_path, output_path],
-            check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
-        )
-        if os.path.exists(aiff_path):
-            os.unlink(aiff_path)
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", aiff_path, output_path],
+                check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
+            )
+        finally:
+            if os.path.exists(aiff_path):
+                os.unlink(aiff_path)
 
     def synthesize_two_host(self, script: str, output_path: str, voice2: str | None = None) -> None:
         if not voice2:
@@ -163,18 +159,15 @@ class MacOSSay(TTSEngine):
 
         from pydub import AudioSegment
         combined = AudioSegment.empty()
-        temp_files = []
 
-        try:
+        with tempfile.TemporaryDirectory() as tmpdir:
             for i, (speaker, text) in enumerate(segments):
-                temp_path = os.path.join(tempfile.gettempdir(), f"segment_{i}.wav")
-                temp_files.append(temp_path)
+                temp_path = os.path.join(tmpdir, f"segment_{i}.wav")
                 voice = self.voice if speaker == "ALEX" else voice2
 
-                aiff_path = temp_path.replace(".wav", ".aiff")
-                temp_files.append(aiff_path)
+                aiff_path = str(Path(temp_path).with_suffix(".aiff"))
 
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tf:
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, dir=tmpdir) as tf:
                     tf.write(text)
                     seg_text_path = tf.name
 
@@ -185,20 +178,20 @@ class MacOSSay(TTSEngine):
                     )
                 finally:
                     os.unlink(seg_text_path)
-                subprocess.run(
-                    ["ffmpeg", "-y", "-i", aiff_path, temp_path],
-                    check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
-                )
+                try:
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", aiff_path, temp_path],
+                        check=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT,
+                    )
+                finally:
+                    if os.path.exists(aiff_path):
+                        os.unlink(aiff_path)
 
                 segment_audio = AudioSegment.from_wav(temp_path)
                 combined += segment_audio
                 combined += AudioSegment.silent(duration=300)
 
             combined.export(output_path, format="wav")
-        finally:
-            for f in temp_files:
-                if os.path.exists(f):
-                    os.unlink(f)
 
 
 def _parse_two_host_script(script: str) -> list[tuple[str, str]]:

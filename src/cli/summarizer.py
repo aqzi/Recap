@@ -54,82 +54,75 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
     kb = None
     lang = None if language == "auto" else language
 
-    with create_progress() as progress:
-        if kb_dir:
-            kb = init_kb(kb_dir, kb_rebuild, embedding_model, progress, console)
+    try:
+        with create_progress() as progress:
+            if kb_dir:
+                kb = init_kb(kb_dir, kb_rebuild, embedding_model, progress, console)
 
-        if transcript:
-            task_parse = progress.add_task("Parsing transcript...", total=1)
-            segments = parse_transcript(transcript)
-            progress.update(task_parse, advance=1)
-        else:
-            task_transcribe = progress.add_task("Transcribing audio...", total=None)
-            try:
-                segments, duration = transcribe(audio_file, model, lang, progress, task_transcribe)
-            except Exception as e:
-                console.print(f"\n[bold red]Error:[/bold red] Transcription failed: {e}")
-                if kb:
-                    kb.close()
+            if transcript:
+                task_parse = progress.add_task("Parsing transcript...", total=1)
+                segments = parse_transcript(transcript)
+                progress.update(task_parse, advance=1)
+            else:
+                task_transcribe = progress.add_task("Transcribing audio...", total=None)
+                try:
+                    segments, duration = transcribe(audio_file, model, lang, progress, task_transcribe)
+                except Exception as e:
+                    console.print(f"\n[bold red]Error:[/bold red] Transcription failed: {e}")
+                    sys.exit(1)
+
+            if not segments:
+                console.print("\n[bold red]Error:[/bold red] No speech detected in the audio file.")
                 sys.exit(1)
 
-        if not segments:
-            console.print("\n[bold red]Error:[/bold red] No speech detected in the audio file.")
-            if kb:
-                kb.close()
-            sys.exit(1)
+            chunks = chunk_transcript(segments, chunk_minutes)
+            console.print(f"  Split transcript into {len(chunks)} chunk(s) for summarization")
 
-        chunks = chunk_transcript(segments, chunk_minutes)
-        console.print(f"  Split transcript into {len(chunks)} chunk(s) for summarization")
+            task_summarize = progress.add_task("Summarizing chunks...", total=len(chunks))
+            chunk_summaries = []
+            for i, chunk in enumerate(chunks):
+                chunk_kb = kb.retrieve(chunk["text"], top_k=3, max_chars=1500) if kb else None
+                chunk_kb = chunk_kb or None
+                try:
+                    summary = summarize_chunk(
+                        chunk, i, len(chunks), llm_model,
+                        hint=hint, kb_context=chunk_kb,
+                    )
+                    chunk_summaries.append(summary)
+                except Exception as e:
+                    console.print(f"\n[bold red]Error:[/bold red] Summarization failed on chunk {i + 1}: {e}")
+                    sys.exit(1)
+                progress.update(task_summarize, advance=1)
 
-        task_summarize = progress.add_task("Summarizing chunks...", total=len(chunks))
-        chunk_summaries = []
-        for i, chunk in enumerate(chunks):
-            chunk_kb = kb.retrieve(chunk["text"], top_k=3, max_chars=1500) if kb else None
-            chunk_kb = chunk_kb or None
-            try:
-                summary = summarize_chunk(
-                    chunk, i, len(chunks), llm_model,
-                    hint=hint, kb_context=chunk_kb,
-                )
-                chunk_summaries.append(summary)
-            except Exception as e:
-                console.print(f"\n[bold red]Error:[/bold red] Summarization failed on chunk {i + 1}: {e}")
-                if kb:
-                    kb.close()
-                sys.exit(1)
-            progress.update(task_summarize, advance=1)
-
-        task_consolidate = progress.add_task("Consolidating summary...", total=1)
-        consolidation_kb = (
-            kb.retrieve_multi(chunk_summaries, top_k_per_query=3, max_chars=3000)
-            if kb else None
-        )
-        consolidation_kb = consolidation_kb or None
-        try:
-            final_summary = consolidate_summaries(
-                chunk_summaries, llm_model,
-                hint=hint, kb_context=consolidation_kb,
+            task_consolidate = progress.add_task("Consolidating summary...", total=1)
+            consolidation_kb = (
+                kb.retrieve_multi(chunk_summaries, top_k_per_query=3, max_chars=3000)
+                if kb else None
             )
-        except Exception as e:
-            console.print(f"\n[bold red]Error:[/bold red] Consolidation failed: {e}")
-            if kb:
-                kb.close()
-            sys.exit(1)
-        progress.update(task_consolidate, advance=1)
+            consolidation_kb = consolidation_kb or None
+            try:
+                final_summary = consolidate_summaries(
+                    chunk_summaries, llm_model,
+                    hint=hint, kb_context=consolidation_kb,
+                )
+            except Exception as e:
+                console.print(f"\n[bold red]Error:[/bold red] Consolidation failed: {e}")
+                sys.exit(1)
+            progress.update(task_consolidate, advance=1)
 
-        if transcript:
-            task_write = progress.add_task("Writing output files...", total=1)
-            s_path = write_summary(final_summary, output_dir)
-            progress.update(task_write, advance=1)
-        else:
-            task_write = progress.add_task("Writing output files...", total=2)
-            t_path = write_transcript(segments, output_dir)
-            progress.update(task_write, advance=1)
-            s_path = write_summary(final_summary, output_dir)
-            progress.update(task_write, advance=1)
-
-    if kb:
-        kb.close()
+            if transcript:
+                task_write = progress.add_task("Writing output files...", total=1)
+                s_path = write_summary(final_summary, output_dir)
+                progress.update(task_write, advance=1)
+            else:
+                task_write = progress.add_task("Writing output files...", total=2)
+                t_path = write_transcript(segments, output_dir)
+                progress.update(task_write, advance=1)
+                s_path = write_summary(final_summary, output_dir)
+                progress.update(task_write, advance=1)
+    finally:
+        if kb:
+            kb.close()
 
     console.print()
     console.print("[bold green]Done![/bold green]")

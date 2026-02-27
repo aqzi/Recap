@@ -23,6 +23,8 @@ export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
+Config files (`config.yaml`, `interest.md`, `podcast_config.yaml`) and output directories (`output/`, `data/`) are resolved relative to the project root, so the tool works correctly regardless of which directory you run it from.
+
 ## Modes
 
 ### 1. Summarize a local audio file
@@ -227,5 +229,12 @@ python3 -m piper.download_voices en_US-lessac-medium
 The `voice` value in `podcast_config.yaml` must match the filename without `.onnx` (e.g. `en_US-lessac-medium`).
 
 For macOS without extra setup, use `engine: macos_say` with a system voice name like `Daniel`.
+
+## Running tests
+
+```bash
+pip install pytest
+python -m pytest tests/ -v
+```
 
 Supports Dutch and English audio. Output is always in English.

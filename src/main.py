@@ -1,5 +1,6 @@
 import os
 import warnings
+from pathlib import Path
 
 import click
 import yaml
@@ -8,20 +9,26 @@ warnings.filterwarnings("ignore", category=ResourceWarning, message="unclosed.*s
 
 from fileio.progress import console
 
-LLM_CONFIG_PATH = "config.yaml"
+# Resolve paths relative to the project root (parent of src/)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+LLM_CONFIG_PATH = str(_PROJECT_ROOT / "config.yaml")
+INTEREST_PATH = str(_PROJECT_ROOT / "interest.md")
+PODCAST_CONFIG_PATH = str(_PROJECT_ROOT / "podcast_config.yaml")
+DEFAULT_OUTPUT_DIR = str(_PROJECT_ROOT / "output")
 DEFAULT_LLM_MODEL = "llama3.1:8b"
 
 
 def derive_output_dir(audio_file):
     """Derive the default output directory from the audio filename."""
     name = os.path.splitext(os.path.basename(audio_file))[0]
-    return os.path.join("output", name)
+    return os.path.join(DEFAULT_OUTPUT_DIR, name)
 
 
 def load_interests():
     """Load interest.md if it exists."""
-    if os.path.isfile("interest.md"):
-        with open("interest.md", encoding="utf-8") as f:
+    if os.path.isfile(INTEREST_PATH):
+        with open(INTEREST_PATH, encoding="utf-8") as f:
             text = f.read().strip()
             return text or None
     return None
@@ -29,8 +36,8 @@ def load_interests():
 
 def load_podcast_config():
     """Load podcast_config.yaml or return defaults."""
-    if os.path.isfile("podcast_config.yaml"):
-        with open("podcast_config.yaml", encoding="utf-8") as f:
+    if os.path.isfile(PODCAST_CONFIG_PATH):
+        with open(PODCAST_CONFIG_PATH, encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return {}
 
@@ -88,7 +95,7 @@ def _apply_llm_config_to_env(llm_config: dict) -> None:
     type=click.Choice(["auto", "nl", "en"]),
     default="auto", help="Audio language. Default: auto.",
 )
-@click.option("--chunk-minutes", type=int, default=10, help="Chunk size in minutes. Default: 10.")
+@click.option("--chunk-minutes", type=click.IntRange(min=1), default=10, help="Chunk size in minutes. Default: 10.")
 @click.option("--kb", type=click.Path(exists=True, file_okay=False),
               default=None, help="Directory of reference docs for domain-aware summaries (RAG).")
 @click.option("--kb-rebuild", is_flag=True, default=False,

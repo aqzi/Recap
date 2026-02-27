@@ -25,8 +25,15 @@ def check_ollama(llm_model: str) -> None:
         sys.exit(1)
 
     available = [m.model for m in models_response.models]
-    model_base = llm_model.split(":")[0]
-    if not any(llm_model in name or name.startswith(model_base) for name in available):
+    has_tag = ":" in llm_model
+    if has_tag:
+        # User specified a tag (e.g. "llama3.2:3b") — require exact match
+        found = any(llm_model == name for name in available)
+    else:
+        # No tag (e.g. "llama3.2") — match any variant with that base name
+        available_bases = [name.split(":")[0] for name in available]
+        found = any(llm_model == abase for abase in available_bases)
+    if not found:
         console.print(f"[bold red]Error:[/bold red] Model '{llm_model}' not found locally.")
         console.print(f"Pull it with: ollama pull {llm_model}")
         sys.exit(1)

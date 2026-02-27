@@ -24,7 +24,8 @@ def run_podcast(output_dir, llm_model, kb_dir=None, kb_rebuild=False, embedding_
     style = config.get("podcast", {}).get("style", "solo")
 
     if output_dir is None:
-        output_dir = os.path.join("output", f"podcast_{date.today().isoformat()}")
+        from main import DEFAULT_OUTPUT_DIR
+        output_dir = os.path.join(DEFAULT_OUTPUT_DIR, f"podcast_{date.today().isoformat()}")
 
     console.print("[bold]Podcast Generator[/bold]")
     console.print(f"  Style:    {style}")
@@ -42,38 +43,37 @@ def run_podcast(output_dir, llm_model, kb_dir=None, kb_rebuild=False, embedding_
 
     kb = None
 
-    with create_progress() as progress:
-        if kb_dir:
-            kb = init_kb(kb_dir, kb_rebuild, embedding_model, progress, console)
+    try:
+        with create_progress() as progress:
+            if kb_dir:
+                kb = init_kb(kb_dir, kb_rebuild, embedding_model, progress, console)
 
-        try:
-            script, sources_md = generate_podcast(interests, config, llm_model, progress, kb=kb)
-        except Exception as e:
-            console.print(f"\n[bold red]Error:[/bold red] Podcast generation failed: {e}")
-            if kb:
-                kb.close()
-            sys.exit(1)
+            try:
+                script, sources_md = generate_podcast(interests, config, llm_model, progress, kb=kb)
+            except Exception as e:
+                console.print(f"\n[bold red]Error:[/bold red] Podcast generation failed: {e}")
+                sys.exit(1)
 
-        task_tts = progress.add_task("Generating audio...", total=1)
-        audio_path = os.path.join(output_dir, "podcast.wav")
-        try:
-            tts = get_tts_engine(config)
-            if style == "two_host":
-                voice2 = config.get("tts", {}).get("voice_host2")
-                tts.synthesize_two_host(script, audio_path, voice2)
-            else:
-                tts.synthesize(script, audio_path)
-        except Exception as e:
-            console.print(f"\n[bold red]Error:[/bold red] TTS failed: {e}")
-            sys.exit(1)
-        progress.update(task_tts, completed=1)
+            task_tts = progress.add_task("Generating audio...", total=1)
+            audio_path = os.path.join(output_dir, "podcast.wav")
+            try:
+                tts = get_tts_engine(config)
+                if style == "two_host":
+                    voice2 = config.get("tts", {}).get("voice_host2")
+                    tts.synthesize_two_host(script, audio_path, voice2)
+                else:
+                    tts.synthesize(script, audio_path)
+            except Exception as e:
+                console.print(f"\n[bold red]Error:[/bold red] TTS failed: {e}")
+                sys.exit(1)
+            progress.update(task_tts, completed=1)
 
-        task_write = progress.add_task("Writing output files...", total=2)
-        script_path, sources_path = write_podcast_output(script, sources_md, output_dir)
-        progress.update(task_write, completed=2)
-
-    if kb:
-        kb.close()
+            task_write = progress.add_task("Writing output files...", total=2)
+            script_path, sources_path = write_podcast_output(script, sources_md, output_dir)
+            progress.update(task_write, completed=2)
+    finally:
+        if kb:
+            kb.close()
 
     console.print()
     console.print("[bold green]Done![/bold green]")
