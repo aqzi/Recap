@@ -1,11 +1,11 @@
 # Recap
 
-A fully local CLI tool that transcribes and summarizes audio, records from input devices, or generates personalized tech podcasts. Runs entirely on your machine — no cloud APIs, no data leaves your device.
+A CLI tool that transcribes and summarizes audio, records from input devices, or generates personalized tech podcasts. Runs locally by default with Ollama, or connect to cloud LLMs (OpenAI, Anthropic, etc.) via LiteLLM.
 
 ## Requirements
 
 - Python 3.10+
-- [Ollama](https://ollama.com/) running locally with a model pulled (default: `llama3.1:8b`)
+- [Ollama](https://ollama.com/) for local models, or an API key for a cloud provider (OpenAI, Anthropic, etc.)
 - ffmpeg
 - TTS engine for podcast audio: macOS `say` (built-in, zero setup) or [Piper TTS](https://github.com/rhasspy/piper)
 
@@ -13,7 +13,14 @@ A fully local CLI tool that transcribes and summarizes audio, records from input
 
 ```bash
 pip install -r requirements.txt
+
+# For local models (default):
 ollama pull llama3.1:8b
+
+# Or use a cloud model — set your API key:
+export OPENAI_API_KEY=sk-...
+# or
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ## Modes
@@ -81,7 +88,7 @@ AUDIO_FILE             Path to audio file (optional)
 --embedding-model      Fastembed model for KB embeddings (default: BAAI/bge-small-en-v1.5)
 --model, -m            Whisper model size (default: medium)
 --output-dir, -o       Output directory (default: output/<name>/)
---llm-model            Ollama model (default: llama3.1:8b)
+--llm-model            LLM model — Ollama, OpenAI (gpt-*), Anthropic (claude-*). Default from config.yaml
 --language, -l         Audio language: auto, nl, en (default: auto)
 --chunk-minutes        Chunk size in minutes (default: 10)
 ```
@@ -144,6 +151,25 @@ Popular fastembed models (downloaded automatically on first use):
 Changing the embedding model requires re-indexing. The tool will detect the mismatch and ask you to add `--kb-rebuild`.
 
 ## Configuration
+
+### `config.yaml` — LLM settings
+
+Every time you run the tool, it asks which AI model you want to use. Your choice is saved to `config.yaml` so it becomes the default next time.
+
+**First run:** The tool will walk you through picking a model:
+1. Choose between **local** (runs on your machine via Ollama) or **cloud** (OpenAI, Anthropic, etc.)
+2. For local models, it checks your hardware (RAM, GPU) and suggests the best model for your machine
+3. For cloud models, it asks for your API key once — then remembers it
+
+**Subsequent runs:** The tool uses your last chosen model as the default. Just hit Enter to keep it, or pick a different one.
+
+**Skip the prompt entirely** by passing a model on the command line:
+
+```bash
+python src/main.py meeting.mp3 --llm-model gpt-4o
+python src/main.py meeting.mp3 --llm-model claude-sonnet-4-6
+python src/main.py meeting.mp3 --llm-model mistral:7b
+```
 
 ### `interest.md`
 

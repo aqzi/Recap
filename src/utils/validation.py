@@ -30,3 +30,23 @@ def check_ollama(llm_model: str) -> None:
         console.print(f"[bold red]Error:[/bold red] Model '{llm_model}' not found locally.")
         console.print(f"Pull it with: ollama pull {llm_model}")
         sys.exit(1)
+
+
+def check_llm_model(llm_model: str) -> None:
+    """Validate the LLM model based on its provider."""
+    from core.llm import detect_provider
+
+    provider = detect_provider(llm_model)
+
+    if provider == "openai":
+        if not os.environ.get("OPENAI_API_KEY"):
+            console.print("[bold red]Error:[/bold red] OPENAI_API_KEY not set.")
+            console.print("Set it via environment variable or config.yaml.")
+            sys.exit(1)
+    elif provider == "anthropic":
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            console.print("[bold red]Error:[/bold red] ANTHROPIC_API_KEY not set.")
+            console.print("Set it via environment variable or config.yaml.")
+            sys.exit(1)
+    else:
+        check_ollama(llm_model)

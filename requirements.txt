@@ -1,6 +1,7 @@
 faster-whisper
 mlx-whisper; sys_platform == "darwin"
 ollama
+litellm
 click
 rich
 feedparser

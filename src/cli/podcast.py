@@ -4,7 +4,7 @@ from datetime import date
 
 from core.knowledge_base import init_kb
 from fileio.progress import console, create_progress
-from utils.validation import check_ollama
+from utils.validation import check_llm_model
 
 
 def run_podcast(output_dir, llm_model, kb_dir=None, kb_rebuild=False, embedding_model=None):
@@ -28,14 +28,16 @@ def run_podcast(output_dir, llm_model, kb_dir=None, kb_rebuild=False, embedding_
 
     console.print("[bold]Podcast Generator[/bold]")
     console.print(f"  Style:    {style}")
-    console.print(f"  LLM:      {llm_model}")
+    from core.llm import detect_provider
+    provider = detect_provider(llm_model)
+    console.print(f"  LLM:      {llm_model} ({provider})")
     console.print(f"  TTS:      {config.get('tts', {}).get('engine', 'piper')}")
     if kb_dir:
         console.print(f"  KB:       {kb_dir}")
     console.print(f"  Output:   {output_dir}")
     console.print()
 
-    check_ollama(llm_model)
+    check_llm_model(llm_model)
     os.makedirs(output_dir, exist_ok=True)
 
     kb = None

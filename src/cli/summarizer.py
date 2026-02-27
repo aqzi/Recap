@@ -11,7 +11,7 @@ from core.llm import (
 from core.transcriber import transcribe, _USE_MLX
 from fileio.progress import console, create_progress
 from fileio.writer import write_summary, write_transcript
-from utils.validation import check_audio_file, check_ollama
+from utils.validation import check_audio_file, check_llm_model
 
 
 def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_minutes,
@@ -27,7 +27,9 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
 
     console.print(f"  Audio:    {audio_file}")
     console.print(f"  Whisper:  {model} — {backend}")
-    console.print(f"  LLM:      {llm_model}")
+    from core.llm import detect_provider
+    provider = detect_provider(llm_model)
+    console.print(f"  LLM:      {llm_model} ({provider})")
     console.print(f"  Language: {language}")
     if context:
         console.print(f"  Context:  {context}")
@@ -41,7 +43,7 @@ def run_summarizer(audio_file, model, output_dir, llm_model, language, chunk_min
     console.print()
 
     check_audio_file(audio_file)
-    check_ollama(llm_model)
+    check_llm_model(llm_model)
     os.makedirs(output_dir, exist_ok=True)
 
     kb = None

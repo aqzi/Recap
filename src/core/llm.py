@@ -1,8 +1,9 @@
 import json
 import logging
+import os
 import time
 
-import ollama
+import litellm
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,35 @@ from core.prompts import (
     two_host_script_prompt,
 )
 
+# Suppress litellm's verbose logging
+litellm.suppress_debug_info = True
+
 DEFAULT_NUM_CTX = 8192
+
+
+def detect_provider(model_name: str) -> str:
+    """Detect the LLM provider from the model name."""
+    lower = model_name.lower()
+    if any(lower.startswith(p) for p in ("gpt-", "o1-", "o3-", "o4-")):
+        return "openai"
+    if lower.startswith("claude-"):
+        return "anthropic"
+    return "ollama"
+
+
+def _set_api_keys_from_config(llm_config: dict | None) -> None:
+    """Set provider API keys in the environment from llm_config if not already set."""
+    if not llm_config:
+        return
+    llm = llm_config.get("llm", {})
+    key_map = {
+        "openai_api_key": "OPENAI_API_KEY",
+        "anthropic_api_key": "ANTHROPIC_API_KEY",
+    }
+    for config_key, env_key in key_map.items():
+        value = llm.get(config_key)
+        if value and not os.environ.get(env_key):
+            os.environ[env_key] = value
 
 
 def call_llm(
@@ -33,17 +62,29 @@ def call_llm(
     num_ctx: int = DEFAULT_NUM_CTX,
     retries: int = 1,
 ) -> str:
+    provider = detect_provider(llm_model)
+
+    # Build the model string for litellm
+    if provider == "ollama":
+        model_str = f"ollama/{llm_model}"
+    else:
+        model_str = llm_model
+
     for attempt in range(retries + 1):
         try:
-            response = ollama.chat(
-                model=llm_model,
-                messages=[
+            kwargs = {
+                "model": model_str,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
-                options={"num_ctx": num_ctx, "temperature": 0.3},
-            )
-            return response.message.content
+                "temperature": 0.3,
+            }
+            if provider == "ollama":
+                kwargs["num_ctx"] = num_ctx
+
+            response = litellm.completion(**kwargs)
+            return response.choices[0].message.content
         except Exception:
             if attempt < retries:
                 time.sleep(2)

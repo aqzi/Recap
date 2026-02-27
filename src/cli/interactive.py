@@ -7,8 +7,80 @@ WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
 LANGUAGES = ["auto", "nl", "en"]
 
 
+def _choose_llm_model(llm_config: dict) -> tuple[str, dict]:
+    """Interactive LLM model selection with provider choice and hardware recommendation.
+
+    Returns (chosen_model, updated_llm_config).
+    """
+    saved_model = llm_config.get("llm", {}).get("model", "llama3.1:8b") or "llama3.1:8b"
+
+    console.print()
+    console.print("  LLM provider:")
+    console.print("    [bold cyan][1][/bold cyan] Local (Ollama)")
+    console.print("    [bold cyan][2][/bold cyan] Cloud (OpenAI, Anthropic, Gemini, ...)")
+    console.print()
+    provider_choice = Prompt.ask("Select provider", choices=["1", "2"], default="1")
+
+    if provider_choice == "1":
+        # Local (Ollama) path
+        recommend = Confirm.ask("Get a model recommendation based on your hardware?", default=True)
+
+        if recommend:
+            console.print()
+            console.print("  Model speed:")
+            console.print("    [bold cyan][1][/bold cyan] Fast (smaller model, quicker responses)")
+            console.print("    [bold cyan][2][/bold cyan] Medium (balanced)")
+            console.print("    [bold cyan][3][/bold cyan] Slow (largest model, best quality)")
+            console.print()
+            speed_choice = Prompt.ask("Select speed", choices=["1", "2", "3"], default="2")
+            speed_map = {"1": "fast", "2": "medium", "3": "slow"}
+            speed = speed_map[speed_choice]
+
+            from core.hardware import recommend_model
+            model_name, explanation = recommend_model(speed)
+
+            if model_name:
+                console.print(f"  [bold green]Recommendation: {model_name}[/bold green]")
+                console.print(f"  [dim]{explanation}[/dim]")
+                default_model = model_name
+            else:
+                console.print(f"  [yellow]{explanation}[/yellow]")
+                default_model = saved_model
+        else:
+            default_model = saved_model
+
+        llm_model = Prompt.ask("LLM model", default=default_model)
+
+    else:
+        # Cloud provider path
+        from core.llm import detect_provider
+
+        default_cloud = saved_model if detect_provider(saved_model) != "ollama" else "gpt-4o"
+        llm_model = Prompt.ask("Model name (e.g. gpt-4o, claude-sonnet-4-6)", default=default_cloud)
+
+        provider = detect_provider(llm_model)
+        if provider == "openai":
+            existing_key = llm_config.get("llm", {}).get("openai_api_key", "")
+            if not existing_key and not os.environ.get("OPENAI_API_KEY"):
+                key = Prompt.ask("OpenAI API key")
+                llm_config.setdefault("llm", {})["openai_api_key"] = key
+        elif provider == "anthropic":
+            existing_key = llm_config.get("llm", {}).get("anthropic_api_key", "")
+            if not existing_key and not os.environ.get("ANTHROPIC_API_KEY"):
+                key = Prompt.ask("Anthropic API key")
+                llm_config.setdefault("llm", {})["anthropic_api_key"] = key
+
+    # Persist the chosen model
+    llm_config.setdefault("llm", {})["model"] = llm_model
+    return llm_model, llm_config
+
+
 def interactive_mode():
     """Guide the user through mode selection and options step by step."""
+    from main import load_llm_config, save_llm_config, _apply_llm_config_to_env
+
+    llm_config = load_llm_config()
+
     console.print()
     console.print("[bold]Recap[/bold]")
     console.print()
@@ -46,7 +118,6 @@ def interactive_mode():
 
     # Defaults
     whisper_model = "medium"
-    llm_model = "llama3.1:8b"
     language = "auto"
     output_dir = None
     kb_dir = None
@@ -54,13 +125,14 @@ def interactive_mode():
     embedding_model = None
     chunk_minutes = 10
 
-    # Advanced options
+    # Always ask about model selection
+    llm_model, llm_config = _choose_llm_model(llm_config)
+
+    # Additional settings
     console.print()
-    customize = Confirm.ask("Customize settings?", default=False)
+    customize = Confirm.ask("Customize other settings?", default=False)
 
     if customize:
-        llm_model = Prompt.ask("Ollama model", default="llama3.1:8b")
-
         if mode == "1":
             whisper_model = Prompt.ask(
                 f"Whisper model ({', '.join(WHISPER_MODELS)})",
@@ -82,6 +154,10 @@ def interactive_mode():
         out_input = Prompt.ask("Output directory (empty for auto)", default="")
         if out_input:
             output_dir = out_input
+
+    # Save config and apply API keys
+    save_llm_config(llm_config)
+    _apply_llm_config_to_env(llm_config)
 
     console.print()
 

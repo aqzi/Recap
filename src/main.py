@@ -8,6 +8,9 @@ warnings.filterwarnings("ignore", category=ResourceWarning, message="unclosed.*s
 
 from fileio.progress import console
 
+LLM_CONFIG_PATH = "config.yaml"
+DEFAULT_LLM_MODEL = "llama3.1:8b"
+
 
 def derive_output_dir(audio_file):
     """Derive the default output directory from the audio filename."""
@@ -32,7 +35,42 @@ def load_podcast_config():
     return {}
 
 
+def load_llm_config() -> dict:
+    """Load config.yaml or create it with defaults if missing."""
+    if os.path.isfile(LLM_CONFIG_PATH):
+        with open(LLM_CONFIG_PATH, encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+            # Ensure the llm key exists
+            config.setdefault("llm", {})
+            config["llm"].setdefault("model", DEFAULT_LLM_MODEL)
+            return config
+
+    # Create default config
+    config = {
+        "llm": {
+            "model": DEFAULT_LLM_MODEL,
+            "openai_api_key": "",
+            "anthropic_api_key": "",
+        }
+    }
+    save_llm_config(config)
+    return config
+
+
+def save_llm_config(config: dict) -> None:
+    """Write config back to config.yaml."""
+    with open(LLM_CONFIG_PATH, "w", encoding="utf-8") as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+
+def _apply_llm_config_to_env(llm_config: dict) -> None:
+    """Set API keys from config into environment variables."""
+    from core.llm import _set_api_keys_from_config
+    _set_api_keys_from_config(llm_config)
+
+
 # ---------- CLI ----------
+
 
 @click.command()
 @click.argument("audio_file", required=False, type=click.Path(exists=True))
@@ -43,7 +81,8 @@ def load_podcast_config():
     default="medium", help="Whisper model size. Default: medium.",
 )
 @click.option("--output-dir", "-o", type=click.Path(), default=None, help="Directory for output files.")
-@click.option("--llm-model", default="llama3.1:8b", help="Ollama model. Default: llama3.1:8b.")
+@click.option("--llm-model", default=None,
+              help="LLM model. Supports Ollama, OpenAI (gpt-*), Anthropic (claude-*). Default from config.yaml.")
 @click.option(
     "--language", "-l",
     type=click.Choice(["auto", "nl", "en"]),
@@ -79,6 +118,18 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
         from cli.interactive import interactive_mode
         interactive_mode()
         return
+
+    # Load LLM config and apply API keys to environment
+    llm_config = load_llm_config()
+    _apply_llm_config_to_env(llm_config)
+
+    # Prompt for model selection if --llm-model not explicitly provided
+    if llm_model is None:
+        from cli.interactive import _choose_llm_model
+        llm_model, llm_config = _choose_llm_model(llm_config)
+        save_llm_config(llm_config)
+        _apply_llm_config_to_env(llm_config)
+        console.print()
 
     if podcast:
         if audio_file:
