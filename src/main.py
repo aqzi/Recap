@@ -70,6 +70,17 @@ def save_llm_config(config: dict) -> None:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
 
+def get_last_input_path(config: dict) -> str:
+    """Return the last input path from config, or empty string."""
+    return config.get("last_input_path", "") or ""
+
+
+def set_last_input_path(config: dict, path: str) -> None:
+    """Save the last input path to config and persist it."""
+    config["last_input_path"] = path
+    save_llm_config(config)
+
+
 def _apply_llm_config_to_env(llm_config: dict) -> None:
     """Set API keys from config into environment variables."""
     from core.llm import _set_api_keys_from_config

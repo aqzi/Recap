@@ -23,7 +23,7 @@ def _choose_llm_model(llm_config: dict) -> tuple[str, dict]:
 
     if provider_choice == "1":
         # Local (Ollama) path
-        recommend = Confirm.ask("Get a model recommendation based on your hardware?", default=True)
+        recommend = Confirm.ask("Get a model recommendation based on your hardware?", default=False)
 
         if recommend:
             console.print()
@@ -77,9 +77,10 @@ def _choose_llm_model(llm_config: dict) -> tuple[str, dict]:
 
 def interactive_mode():
     """Guide the user through mode selection and options step by step."""
-    from main import load_llm_config, save_llm_config, _apply_llm_config_to_env
+    from main import load_llm_config, save_llm_config, _apply_llm_config_to_env, get_last_input_path, set_last_input_path
 
     llm_config = load_llm_config()
+    last_path = get_last_input_path(llm_config)
 
     console.print()
     console.print("[bold]Recap[/bold]")
@@ -114,20 +115,23 @@ def interactive_mode():
 
         if input_type == "2":
             while True:
-                transcript = Prompt.ask("Path to transcript file (.md)")
+                transcript = Prompt.ask("Path to transcript file (.md)", default=last_path or "")
                 if os.path.isfile(transcript):
+                    set_last_input_path(llm_config, transcript)
                     break
                 console.print(f"  [red]File not found:[/red] {transcript}")
         else:
             while True:
-                audio_file = Prompt.ask("Path to audio file")
+                audio_file = Prompt.ask("Path to audio file", default=last_path or "")
                 if os.path.isfile(audio_file):
+                    set_last_input_path(llm_config, audio_file)
                     break
                 console.print(f"  [red]File not found:[/red] {audio_file}")
     elif mode == "2":
         while True:
-            podcast_input_path = Prompt.ask("Path to input text (file or directory)")
+            podcast_input_path = Prompt.ask("Path to input text (file or directory)", default=last_path or "")
             if os.path.exists(podcast_input_path):
+                set_last_input_path(llm_config, podcast_input_path)
                 break
             console.print(f"  [red]Path not found:[/red] {podcast_input_path}")
 
