@@ -69,7 +69,7 @@ class KnowledgeBase:
 
         Returns the number of files processed.
         """
-        files = _find_supported_files(directory)
+        files = find_supported_files(directory)
         if progress and task_id is not None:
             progress.update(task_id, total=len(files))
 
@@ -78,7 +78,7 @@ class KnowledgeBase:
         files_processed = 0
 
         for filepath in files:
-            text = _extract_text(filepath)
+            text = extract_text(filepath)
             if text and text.strip():
                 filename = os.path.basename(filepath)
                 chunks = _chunk_text(text, filename)
@@ -246,7 +246,7 @@ def init_kb(kb_dir, kb_rebuild, embedding_model, progress, console):
 # --- File discovery ---
 
 
-def _find_supported_files(directory: str) -> list[str]:
+def find_supported_files(directory: str) -> list[str]:
     """Recursively find all supported files in directory."""
     found = []
     for root, _dirs, files in os.walk(directory):
@@ -262,7 +262,7 @@ def _find_supported_files(directory: str) -> list[str]:
 # --- Text extraction (lazy imports for optional deps) ---
 
 
-def _extract_text(filepath: str) -> str | None:
+def extract_text(filepath: str) -> str | None:
     """Extract plain text from a file based on its extension."""
     ext = os.path.splitext(filepath)[1].lower()
     try:

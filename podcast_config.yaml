@@ -9,7 +9,7 @@ podcast:
   max_articles: 5
   target_length: medium             # short (~3min) | medium (~7min) | long (~15min)
 
-sources:
+enrichment:
   feeds:
     - https://hnrss.org/newest?points=100
     - https://feeds.arstechnica.com/arstechnica/technology-lab

@@ -111,10 +111,10 @@ def consolidate_summaries(
 # --- Podcast functions ---
 
 def rank_articles(
-    articles: list[dict], interests: str, max_articles: int, llm_model: str,
+    articles: list[dict], reference_text: str, max_articles: int, llm_model: str,
 ) -> list[int]:
     """Return indices of the most relevant articles, ordered by relevance."""
-    prompt = article_ranking_prompt(articles, interests, max_articles)
+    prompt = article_ranking_prompt(articles, reference_text, max_articles)
     response = call_llm(prompt, ARTICLE_RANKING_SYSTEM, llm_model)
 
     # Parse JSON array from response
@@ -132,13 +132,21 @@ def rank_articles(
 
 
 def generate_podcast_script(
-    articles: list[dict], interests: str, style: str, target_length: str, llm_model: str,
+    input_text: str, style: str, target_length: str, llm_model: str,
+    articles: list[dict] | None = None,
+    interests: str | None = None,
     kb_context: str | None = None,
 ) -> str:
     """Generate a podcast script in solo or two_host style."""
     if style == "two_host":
-        prompt = two_host_script_prompt(articles, interests, target_length, kb_context=kb_context)
+        prompt = two_host_script_prompt(
+            input_text, target_length,
+            articles=articles, interests=interests, kb_context=kb_context,
+        )
         return call_llm(prompt, TWO_HOST_SCRIPT_SYSTEM, llm_model, num_ctx=16384, timeout=300)
     else:
-        prompt = solo_script_prompt(articles, interests, target_length, kb_context=kb_context)
+        prompt = solo_script_prompt(
+            input_text, target_length,
+            articles=articles, interests=interests, kb_context=kb_context,
+        )
         return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384, timeout=300)

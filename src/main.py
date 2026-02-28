@@ -81,7 +81,8 @@ def _apply_llm_config_to_env(llm_config: dict) -> None:
 
 @click.command()
 @click.argument("audio_file", required=False, type=click.Path(exists=True))
-@click.option("--podcast", is_flag=True, default=False, help="Generate a podcast from your interests.")
+@click.option("--podcast", type=click.Path(exists=True), default=None,
+              help="Generate a podcast from a file or directory of text.")
 @click.option(
     "--model",
     type=click.Choice(["tiny", "base", "small", "medium", "large-v2", "large-v3"]),
@@ -116,7 +117,7 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
     Modes:
       AUDIO_FILE                  Summarize a local audio file
       --transcript FILE           Summarize an existing transcript
-      --podcast                   Generate a podcast from your interests
+      --podcast PATH              Generate a podcast from a file or directory
       --record                    Record audio from an input device
     """
     if record_flag:
@@ -129,7 +130,7 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
         import sys
         sys.exit(1)
 
-    if not audio_file and not podcast and not transcript:
+    if not audio_file and podcast is None and not transcript:
         from cli.interactive import interactive_mode
         interactive_mode()
         return
@@ -146,13 +147,9 @@ def main(audio_file, podcast, model, output_dir, llm_model, language, chunk_minu
         _apply_llm_config_to_env(llm_config)
         console.print()
 
-    if podcast:
-        if audio_file:
-            console.print("[bold red]Error:[/bold red] --podcast cannot be combined with an audio file.")
-            import sys
-            sys.exit(1)
+    if podcast is not None:
         from cli.podcast import run_podcast
-        run_podcast(output_dir, llm_model, kb_dir=kb, kb_rebuild=kb_rebuild,
+        run_podcast(podcast, output_dir, llm_model, kb_dir=kb, kb_rebuild=kb_rebuild,
                     embedding_model=embedding_model)
     else:
         from cli.summarizer import run_summarizer

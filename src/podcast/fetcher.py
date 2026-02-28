@@ -38,10 +38,15 @@ def fetch_rss_articles(feed_urls: list[str], max_per_feed: int = 10) -> list[dic
     return articles
 
 
-def search_web_articles(interests: str, max_results: int = 10) -> list[dict]:
-    """Search DuckDuckGo for recent articles matching interests."""
-    lines = [l.strip("- ").strip() for l in interests.splitlines() if l.strip().startswith("-")]
-    query = "latest news " + ", ".join(lines[:3]) if lines else "latest tech news"
+def search_web_articles(text: str, max_results: int = 10) -> list[dict]:
+    """Search DuckDuckGo for recent articles matching the given text."""
+    lines = [l.strip("- ").strip() for l in text.splitlines() if l.strip().startswith("-")]
+    if lines:
+        query = "latest news " + ", ".join(lines[:3])
+    else:
+        # Use the first ~30 words as a search query
+        words = text.split()[:30]
+        query = " ".join(words) if words else "latest tech news"
 
     articles = []
     try:

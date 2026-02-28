@@ -103,6 +103,7 @@ def interactive_mode():
     # Audio/transcript input
     audio_file = None
     transcript = None
+    podcast_input_path = None
     if mode == "1":
         console.print()
         console.print("  Input type:")
@@ -123,6 +124,12 @@ def interactive_mode():
                 if os.path.isfile(audio_file):
                     break
                 console.print(f"  [red]File not found:[/red] {audio_file}")
+    elif mode == "2":
+        while True:
+            podcast_input_path = Prompt.ask("Path to input text (file or directory)")
+            if os.path.exists(podcast_input_path):
+                break
+            console.print(f"  [red]Path not found:[/red] {podcast_input_path}")
 
     # Hint (for summarizer mode)
     hint = None
@@ -179,7 +186,7 @@ def interactive_mode():
     # Dispatch
     if mode == "2":
         from cli.podcast import run_podcast
-        run_podcast(output_dir, llm_model, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
+        run_podcast(podcast_input_path, output_dir, llm_model, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
                     embedding_model=embedding_model)
     else:
         from cli.summarizer import run_summarizer
