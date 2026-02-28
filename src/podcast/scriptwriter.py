@@ -12,6 +12,7 @@ def generate_podcast(
     interests: str | None = None,
     source_files: list[str] | None = None,
     kb=None,
+    output_language: str = "en",
 ) -> tuple[str, str]:
     """Full podcast generation pipeline.
 
@@ -77,6 +78,7 @@ def generate_podcast(
         articles=selected or None,
         interests=interests,
         kb_context=script_kb,
+        output_language=output_language,
     )
     progress.update(task_script, completed=1)
 

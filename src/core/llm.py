@@ -9,15 +9,15 @@ logger = logging.getLogger(__name__)
 
 from core.prompts import (
     ARTICLE_RANKING_SYSTEM,
-    SOLO_SCRIPT_SYSTEM,
-    TWO_HOST_SCRIPT_SYSTEM,
     article_ranking_prompt,
     chunk_summary_prompt,
     chunk_summary_system,
     consolidation_prompt,
     consolidation_system,
     solo_script_prompt,
+    solo_script_system,
     two_host_script_prompt,
+    two_host_script_system,
 )
 
 # Suppress litellm's verbose logging
@@ -95,17 +95,27 @@ def call_llm(
 def summarize_chunk(
     chunk: dict, chunk_index: int, total_chunks: int, llm_model: str,
     hint: str | None = None, kb_context: str | None = None,
+    output_language: str = "en", is_audio: bool = True,
 ) -> str:
-    prompt = chunk_summary_prompt(chunk, chunk_index, total_chunks)
-    return call_llm(prompt, chunk_summary_system(hint, kb_context=kb_context), llm_model)
+    prompt = chunk_summary_prompt(chunk, chunk_index, total_chunks, is_audio=is_audio)
+    system = chunk_summary_system(
+        hint, kb_context=kb_context,
+        output_language=output_language, is_audio=is_audio,
+    )
+    return call_llm(prompt, system, llm_model)
 
 
 def consolidate_summaries(
     chunk_summaries: list[str], llm_model: str,
     hint: str | None = None, kb_context: str | None = None,
+    output_language: str = "en", is_audio: bool = True,
 ) -> str:
-    prompt = consolidation_prompt(chunk_summaries)
-    return call_llm(prompt, consolidation_system(hint, kb_context=kb_context), llm_model, num_ctx=16384, timeout=300)
+    prompt = consolidation_prompt(chunk_summaries, is_audio=is_audio)
+    system = consolidation_system(
+        hint, kb_context=kb_context,
+        output_language=output_language, is_audio=is_audio,
+    )
+    return call_llm(prompt, system, llm_model, num_ctx=16384, timeout=300)
 
 
 # --- Podcast functions ---
@@ -136,6 +146,7 @@ def generate_podcast_script(
     articles: list[dict] | None = None,
     interests: str | None = None,
     kb_context: str | None = None,
+    output_language: str = "en",
 ) -> str:
     """Generate a podcast script in solo or two_host style."""
     if style == "two_host":
@@ -143,10 +154,12 @@ def generate_podcast_script(
             input_text, target_length,
             articles=articles, interests=interests, kb_context=kb_context,
         )
-        return call_llm(prompt, TWO_HOST_SCRIPT_SYSTEM, llm_model, num_ctx=16384, timeout=300)
+        system = two_host_script_system(output_language=output_language)
+        return call_llm(prompt, system, llm_model, num_ctx=16384, timeout=300)
     else:
         prompt = solo_script_prompt(
             input_text, target_length,
             articles=articles, interests=interests, kb_context=kb_context,
         )
-        return call_llm(prompt, SOLO_SCRIPT_SYSTEM, llm_model, num_ctx=16384, timeout=300)
+        system = solo_script_system(output_language=output_language)
+        return call_llm(prompt, system, llm_model, num_ctx=16384, timeout=300)

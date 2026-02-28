@@ -6,7 +6,8 @@ from fileio.progress import console, create_progress
 from utils.validation import check_llm_model
 
 
-def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False, embedding_model=None):
+def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False, embedding_model=None,
+                output_language="en"):
     """Run the podcast generation pipeline from input text."""
     from podcast.loader import load_input_text
     from podcast.scriptwriter import generate_podcast, write_podcast_output
@@ -43,6 +44,9 @@ def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False
     console.print("[bold]Podcast Generator[/bold]")
     console.print(f"  Input:    {input_path} ({len(source_files)} file(s))")
     console.print(f"  Style:    {style}")
+    if output_language != "en":
+        from core.prompts import _language_name
+        console.print(f"  Language: {_language_name(output_language)}")
     from core.llm import detect_provider
     provider = detect_provider(llm_model)
     console.print(f"  LLM:      {llm_model} ({provider})")
@@ -79,6 +83,7 @@ def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False
                     interests=interests,
                     source_files=source_files,
                     kb=kb,
+                    output_language=output_language,
                 )
             except Exception as e:
                 console.print(f"\n[bold red]Error:[/bold red] Podcast generation failed: {e}")

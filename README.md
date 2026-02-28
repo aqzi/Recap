@@ -1,6 +1,6 @@
 # Recap
 
-A CLI tool that transcribes and summarizes audio, records from input devices, or generates personalized tech podcasts. Runs locally by default with Ollama, or connect to cloud LLMs (OpenAI, Anthropic, etc.) via LiteLLM.
+A CLI tool that summarizes audio, text files, or entire directories, records from input devices, or generates personalized tech podcasts. Supports multi-language output. Runs locally by default with Ollama, or connect to cloud LLMs (OpenAI, Anthropic, etc.) via LiteLLM.
 
 ## Requirements
 
@@ -27,7 +27,9 @@ Config files (`config.yaml`, `interest.md`, `podcast_config.yaml`) and output di
 
 ## Modes
 
-### 1. Summarize a local audio file
+### 1. Summarize
+
+#### Audio file
 
 ```bash
 python src/main.py meeting.mp3
@@ -38,22 +40,37 @@ Output: `output/meeting/transcript.md`, `summary.md`
 
 Use `--hint` to tell the summarizer what kind of audio it is (e.g., "team meeting", "university lecture", "interview"). This is a short label that guides tone and structure — it doesn't add domain knowledge (use `--kb` for that).
 
-#### Resume from an existing transcript
+#### Text file or directory
 
-You can skip re-transcription by passing the transcript file directly:
+Summarize any supported text file (`.md`, `.pdf`, `.docx`, `.txt`, `.html`, `.csv`):
 
 ```bash
-python src/main.py --transcript output/meeting/transcript.md
-python src/main.py --transcript output/meeting/transcript.md --hint "team standup meeting"
+python src/main.py --summarize notes.pdf
+python src/main.py --summarize report.md --output-language nl
 ```
+
+Summarize an entire directory of files into one combined summary:
+
+```bash
+python src/main.py --summarize ./meeting_notes/
+```
+
+Or produce one summary per file with `--per-file`:
+
+```bash
+python src/main.py --summarize ./meeting_notes/ --per-file
+```
+
+Output: `output/<name>/summary.md` (combined) or `output/<name>/summary_<filename>.md` (per-file)
 
 ### 2. Generate a podcast
 
 ```bash
-python src/main.py --podcast
+python src/main.py --podcast input.md
+python src/main.py --podcast ./notes/ --output-language fr
 ```
 
-Fetches recent articles from RSS feeds and web search, filters by your interests, generates a podcast script, and converts it to audio.
+Generates a podcast script from input text and converts it to audio. Can optionally enrich with articles from RSS feeds and web search.
 
 Output: `output/podcast_<date>/podcast.wav`, `script.md`, `sources.md`
 
@@ -90,8 +107,9 @@ Then open **Audio MIDI Setup**, click `+` to create a **Multi-Output Device** th
 
 ```
 AUDIO_FILE             Path to audio file (optional)
---transcript           Transcript file (.md) to summarize
---podcast              Generate a podcast from your interests
+--summarize PATH       Summarize a text file or directory (md, pdf, docx, txt, ...)
+--per-file             When summarizing a directory, produce one summary per file
+--podcast PATH         Generate a podcast from a file or directory of text
 --record               Record audio from an input device
 --record-name          Optional name for the recording file
 --hint                 Short label for audio type (e.g., 'team meeting', 'lecture') — guides tone
@@ -101,7 +119,8 @@ AUDIO_FILE             Path to audio file (optional)
 --model                Whisper model size (default: medium)
 --output-dir           Output directory (default: output/<name>/)
 --llm-model            LLM model — Ollama, OpenAI (gpt-*), Anthropic (claude-*). Default from config.yaml
---language             Audio language: auto, nl, en (default: auto)
+--input-language       Audio language for Whisper transcription (e.g. auto, en, nl, de, fr, ja, zh). Default: auto
+--output-language      Output language for summaries and podcasts (e.g. en, nl, de, fr). Default from config or en
 --chunk-minutes        Chunk size in minutes (default: 10)
 ```
 
@@ -175,6 +194,8 @@ Every time you run the tool, it asks which AI model you want to use. Your choice
 
 **Subsequent runs:** The tool uses your last chosen model as the default. Just hit Enter to keep it, or pick a different one.
 
+Your output language preference is also saved here (as `output_language`). Set it once with `--output-language nl` and it becomes the default for future runs.
+
 **Skip the prompt entirely** by passing a model on the command line:
 
 ```bash
@@ -236,5 +257,3 @@ For macOS without extra setup, use `engine: macos_say` with a system voice name 
 pip install pytest
 python -m pytest tests/ -v
 ```
-
-Supports Dutch and English audio. Output is always in English.

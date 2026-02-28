@@ -4,7 +4,7 @@ from fileio.progress import console
 from rich.prompt import Confirm, Prompt
 
 WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
-LANGUAGES = ["auto", "nl", "en"]
+LANGUAGES_EXAMPLES = "auto, en, nl, de, fr, es, ja, zh, ..."
 
 
 def _choose_llm_model(llm_config: dict) -> tuple[str, dict]:
@@ -75,9 +75,22 @@ def _choose_llm_model(llm_config: dict) -> tuple[str, dict]:
     return llm_model, llm_config
 
 
+def _choose_output_language(llm_config: dict) -> str:
+    """Prompt for output language, using saved value as default."""
+    from main import get_output_language
+    saved_lang = get_output_language(llm_config)
+    from core.prompts import _language_name
+    console.print()
+    lang = Prompt.ask(
+        f"Output language code (e.g. en, nl, de, fr)",
+        default=saved_lang,
+    )
+    return lang.strip().lower()
+
+
 def interactive_mode():
     """Guide the user through mode selection and options step by step."""
-    from main import load_llm_config, save_llm_config, _apply_llm_config_to_env, get_last_input_path, set_last_input_path
+    from main import load_llm_config, save_llm_config, _apply_llm_config_to_env, get_last_input_path, set_last_input_path, set_output_language
 
     llm_config = load_llm_config()
     last_path = get_last_input_path(llm_config)
@@ -85,7 +98,7 @@ def interactive_mode():
     console.print()
     console.print("[bold]Recap[/bold]")
     console.print()
-    console.print("  [bold cyan][1][/bold cyan] Summarize a local audio file")
+    console.print("  [bold cyan][1][/bold cyan] Summarize")
     console.print("  [bold cyan][2][/bold cyan] Generate a podcast")
     console.print("  [bold cyan][3][/bold cyan] Record audio")
     console.print()
@@ -101,25 +114,30 @@ def interactive_mode():
         run_recorder(out_input or None, rec_name or None)
         return
 
-    # Audio/transcript input
+    # Summarizer input
     audio_file = None
-    transcript = None
+    input_path = None
+    per_file = False
     podcast_input_path = None
+
     if mode == "1":
         console.print()
         console.print("  Input type:")
-        console.print("    [bold cyan][1][/bold cyan] Audio file")
-        console.print("    [bold cyan][2][/bold cyan] Existing transcript")
+        console.print("    [bold cyan][1][/bold cyan] Audio file (wav, mp3, m4a, ogg, flac, ...)")
+        console.print("    [bold cyan][2][/bold cyan] Text file or directory (md, pdf, docx, txt, ...)")
         console.print()
         input_type = Prompt.ask("Select input type", choices=["1", "2"], default="1")
 
         if input_type == "2":
             while True:
-                transcript = Prompt.ask("Path to transcript file (.md)", default=last_path or "")
-                if os.path.isfile(transcript):
-                    set_last_input_path(llm_config, transcript)
+                input_path = Prompt.ask("Path to file or directory", default=last_path or "")
+                if os.path.isfile(input_path) or os.path.isdir(input_path):
+                    set_last_input_path(llm_config, input_path)
                     break
-                console.print(f"  [red]File not found:[/red] {transcript}")
+                console.print(f"  [red]Path not found:[/red] {input_path}")
+
+            if os.path.isdir(input_path):
+                per_file = Confirm.ask("Summarize each file separately?", default=False)
         else:
             while True:
                 audio_file = Prompt.ask("Path to audio file", default=last_path or "")
@@ -154,19 +172,23 @@ def interactive_mode():
     # Always ask about model selection
     llm_model, llm_config = _choose_llm_model(llm_config)
 
+    # Output language
+    output_language = _choose_output_language(llm_config)
+    set_output_language(llm_config, output_language)
+
     # Additional settings
     console.print()
     customize = Confirm.ask("Customize other settings?", default=False)
 
     if customize:
-        if mode == "1" and not transcript:
+        if mode == "1" and audio_file:
             whisper_model = Prompt.ask(
                 f"Whisper model ({', '.join(WHISPER_MODELS)})",
                 choices=WHISPER_MODELS, default="medium",
             )
             language = Prompt.ask(
-                f"Language ({', '.join(LANGUAGES)})",
-                choices=LANGUAGES, default="auto",
+                f"Audio language ({LANGUAGES_EXAMPLES})",
+                default="auto",
             )
 
         kb_input = Prompt.ask("Knowledge base directory (empty to skip)", default="")
@@ -191,10 +213,11 @@ def interactive_mode():
     if mode == "2":
         from cli.podcast import run_podcast
         run_podcast(podcast_input_path, output_dir, llm_model, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
-                    embedding_model=embedding_model)
+                    embedding_model=embedding_model, output_language=output_language)
     else:
         from cli.summarizer import run_summarizer
         run_summarizer(audio_file, whisper_model, output_dir, llm_model,
                        language, chunk_minutes, kb_dir=kb_dir, kb_rebuild=kb_rebuild,
                        embedding_model=embedding_model, hint=hint,
-                       transcript=transcript)
+                       input_path=input_path, per_file=per_file,
+                       output_language=output_language)
