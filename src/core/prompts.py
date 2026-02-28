@@ -95,8 +95,9 @@ Produce a final summary in this format:
 # --- Podcast prompts ---
 
 ARTICLE_RANKING_SYSTEM = """\
-You are a content curator. You rank articles by relevance to a piece of reference text.
-IMPORTANT: Always respond in English. Return ONLY a JSON array of indices, nothing else."""
+You are a content curator. You select articles that are genuinely relevant to a piece of reference text.
+IMPORTANT: Always respond in English. Return ONLY a JSON array of indices, nothing else.
+If no articles are relevant, return an empty array: []"""
 
 
 def article_ranking_prompt(articles: list[dict], reference_text: str, max_articles: int) -> str:
@@ -105,8 +106,14 @@ def article_ranking_prompt(articles: list[dict], reference_text: str, max_articl
         for i, a in enumerate(articles)
     )
     return f"""\
-Given these articles and the reference text, return the indices of the top {max_articles} \
-most relevant articles as a JSON array (e.g. [2, 0, 5, 1, 3]). Most relevant first.
+Given these articles and the reference text, select ONLY articles that are genuinely relevant \
+to the reference text. Return their indices as a JSON array, most relevant first.
+
+Rules:
+- Only include articles that directly relate to topics in the reference text.
+- Return at most {max_articles} articles.
+- If no articles are relevant, return an empty array: []
+- It is better to return fewer highly relevant articles than many loosely related ones.
 
 REFERENCE TEXT:
 {reference_text[:2000]}
@@ -114,7 +121,7 @@ REFERENCE TEXT:
 ARTICLES:
 {article_list}
 
-Return ONLY a JSON array of integer indices, nothing else."""
+Return ONLY a JSON array of integer indices (e.g. [2, 0, 5]) or [] if none are relevant."""
 
 
 LENGTH_WORD_TARGETS = {
@@ -125,14 +132,14 @@ LENGTH_WORD_TARGETS = {
 
 SOLO_SCRIPT_SYSTEM = """\
 You are a professional podcast host. You create engaging, informative podcast scripts \
-for a solo narrator. Your primary focus is the source material provided. Write in a natural \
-spoken style — conversational but informative. Use transitions between topics. Start with a \
-brief intro and end with a short outro.
-IMPORTANT: Always write in English. Output ONLY the script text, no stage directions or metadata.
-CRITICAL: This script will be read aloud by a text-to-speech engine. Do NOT use any markdown \
-formatting (no #, *, **, -, ```, links, etc.). Do NOT use bullet points, numbered lists, or \
-any special symbols. Write everything as natural spoken paragraphs. Spell out abbreviations \
-and symbols where needed (e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
+for a solo narrator. Write in a natural spoken style — conversational but informative.
+Your output is the FINAL spoken script. It will be fed directly into a text-to-speech engine. \
+Output ONLY the words to be spoken — no titles, headers, labels, stage directions, or metadata.
+IMPORTANT: Always write in English.
+CRITICAL: Do NOT use any markdown formatting (no #, *, **, -, ```, links, etc.). \
+Do NOT use bullet points, numbered lists, or any special symbols. Write everything as \
+natural spoken paragraphs. Spell out abbreviations and symbols where needed \
+(e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
 
 
 def solo_script_prompt(
@@ -143,46 +150,51 @@ def solo_script_prompt(
 ) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
 
-    sections = [
-        f"Write a podcast script (~{word_target} words). The primary source material below "
-        f"is the main focus of the podcast. Cover it thoroughly.",
-        f"\nPRIMARY SOURCE MATERIAL:\n{input_text[:6000]}",
-    ]
+    # Merge all material into one block so the LLM sees a single pool of content
+    material_parts = [input_text[:6000]]
 
     if articles:
-        article_blocks = "\n\n---\n\n".join(
-            f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
-            for a in articles
-        )
-        sections.append(
-            f"\nSUPPLEMENTARY ARTICLES (use to add depth, but keep focus on the primary material):\n{article_blocks}"
-        )
+        for a in articles:
+            content = a.get("content", a.get("summary", ""))[:2000]
+            material_parts.append(f"[Related: {a['title']}]\n{content}")
 
-    if interests:
-        sections.append(f"\nLISTENER INTERESTS (guide tone and emphasis):\n{interests}")
+    combined_material = "\n\n---\n\n".join(material_parts)
 
-    if kb_context:
-        sections.append(_kb_context_block(kb_context))
+    kb_section = _kb_context_block(kb_context) if kb_context else ""
+    interests_section = f"\nLISTENER INTERESTS (guide tone and emphasis):\n{interests}" if interests else ""
 
-    sections.append(
-        "\nWrite a natural, engaging script for a single host. The primary source material "
-        "should be the core of the podcast. Supplementary articles, if any, should only add "
-        "context or depth.\nRemember: plain spoken text only, no markdown, no special symbols, no lists."
-    )
+    return f"""\
+Write a podcast script (~{word_target} words).
 
-    return "\n".join(sections)
+IMPORTANT STRUCTURAL RULES:
+- The script must be ONE cohesive narrative from start to finish.
+- NEVER split the script into separate sections or segments per source.
+- NEVER use transition phrases like "now let's look at", "moving on to", \
+"in related news", or "let's switch gears" to introduce external material.
+- When you reference information from a related article, blend it in naturally as \
+supporting evidence, a real-world example, added context, or a deeper explanation \
+within the point you are already making.
+
+SOURCE MATERIAL:
+{combined_material}
+{interests_section}{kb_section}
+
+Output ONLY the spoken script. No title, no headers, no labels. Start directly with \
+the host speaking. Plain spoken paragraphs only, no markdown, no special symbols, no lists."""
 
 
 TWO_HOST_SCRIPT_SYSTEM = """\
 You are a podcast scriptwriter. You write engaging two-host discussion scripts. \
 Host 1 (Alex) leads the conversation and introduces topics. Host 2 (Sam) adds analysis, \
-asks questions, and offers counterpoints. The primary focus is always the source material provided. \
-Write natural dialogue — not formal, not scripted-sounding.
-IMPORTANT: Always write in English. Prefix every line with either "ALEX:" or "SAM:" with no exceptions.
-CRITICAL: This script will be read aloud by a text-to-speech engine. Do NOT use any markdown \
-formatting (no #, *, **, -, ```, links, etc.). Do NOT use bullet points, numbered lists, or \
-any special symbols. Write everything as natural spoken dialogue. Spell out abbreviations \
-and symbols where needed (e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
+asks questions, and offers counterpoints. Write natural dialogue — not formal, not scripted-sounding.
+Your output is the FINAL spoken script. It will be fed directly into a text-to-speech engine. \
+Output ONLY the dialogue — no titles, headers, labels, stage directions, or metadata. \
+Prefix every line with either "ALEX:" or "SAM:" with no exceptions.
+IMPORTANT: Always write in English.
+CRITICAL: Do NOT use any markdown formatting (no #, *, **, -, ```, links, etc.). \
+Do NOT use bullet points, numbered lists, or any special symbols. Write everything as \
+natural spoken dialogue. Spell out abbreviations and symbols where needed \
+(e.g. write "number one" not "1.", write "about 50 percent" not "~50%")."""
 
 
 def two_host_script_prompt(
@@ -193,34 +205,37 @@ def two_host_script_prompt(
 ) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
 
-    sections = [
-        f"Write a two-host podcast script (~{word_target} words). The primary source material "
-        f"below is the main focus of the podcast. Cover it thoroughly.",
-        f"\nPRIMARY SOURCE MATERIAL:\n{input_text[:6000]}",
-    ]
+    # Merge all material into one block so the LLM sees a single pool of content
+    material_parts = [input_text[:6000]]
 
     if articles:
-        article_blocks = "\n\n---\n\n".join(
-            f"### {a['title']}\nSource: {a['url']}\n\n{a.get('content', a.get('summary', ''))[:2000]}"
-            for a in articles
-        )
-        sections.append(
-            f"\nSUPPLEMENTARY ARTICLES (use to add depth, but keep focus on the primary material):\n{article_blocks}"
-        )
+        for a in articles:
+            content = a.get("content", a.get("summary", ""))[:2000]
+            material_parts.append(f"[Related: {a['title']}]\n{content}")
 
-    if interests:
-        sections.append(f"\nLISTENER INTERESTS (guide tone and emphasis):\n{interests}")
+    combined_material = "\n\n---\n\n".join(material_parts)
 
-    if kb_context:
-        sections.append(_kb_context_block(kb_context))
+    kb_section = _kb_context_block(kb_context) if kb_context else ""
+    interests_section = f"\nLISTENER INTERESTS (guide tone and emphasis):\n{interests}" if interests else ""
 
-    sections.append(
-        "\nWrite a natural conversation between ALEX and SAM. The primary source material "
-        "should be the core of the discussion. Supplementary articles, if any, should only "
-        "add context or depth. Every line MUST start with \"ALEX:\" or \"SAM:\".\n"
-        "Remember: plain spoken text only, no markdown, no special symbols, no lists."
-    )
+    return f"""\
+Write a two-host podcast script (~{word_target} words).
 
-    return "\n".join(sections)
+IMPORTANT STRUCTURAL RULES:
+- The script must be ONE cohesive conversation from start to finish.
+- NEVER split the conversation into separate sections or segments per source.
+- NEVER use transition phrases like "now let's look at", "moving on to", \
+"in related news", or "let's switch gears" to introduce external material.
+- When you reference information from a related article, blend it in naturally as \
+supporting evidence, a real-world example, added context, or a deeper explanation \
+within the point being discussed.
+
+SOURCE MATERIAL:
+{combined_material}
+{interests_section}{kb_section}
+
+Output ONLY the spoken dialogue. No title, no headers, no labels. Start directly with \
+ALEX speaking. Every line MUST start with "ALEX:" or "SAM:". \
+Plain spoken dialogue only, no markdown, no special symbols, no lists."""
 
 

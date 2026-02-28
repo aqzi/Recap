@@ -59,11 +59,12 @@ def generate_podcast(
             progress.update(task_rank, completed=1)
 
             # Stage 3: Extract full text for selected articles
-            task_extract = progress.add_task("Extracting article content...", total=len(selected))
-            for article in selected:
-                text = extract_article_text(article["url"])
-                article["content"] = text or article.get("summary", "")
-                progress.advance(task_extract)
+            if selected:
+                task_extract = progress.add_task("Extracting article content...", total=len(selected))
+                for article in selected:
+                    text = extract_article_text(article["url"])
+                    article["content"] = text or article.get("summary", "")
+                    progress.advance(task_extract)
 
     # Stage 4: Generate script
     task_script = progress.add_task("Writing podcast script...", total=1)
@@ -108,7 +109,6 @@ def write_podcast_output(
 
     script_path = os.path.join(output_dir, "script.md")
     with open(script_path, "w", encoding="utf-8") as f:
-        f.write("# Podcast Script\n\n")
         f.write(script)
 
     sources_path = os.path.join(output_dir, "sources.md")

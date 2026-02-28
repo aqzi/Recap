@@ -127,8 +127,8 @@ def rank_articles(
         # Filter to valid indices
         return [i for i in indices if isinstance(i, int) and 0 <= i < len(articles)][:max_articles]
     except (ValueError, json.JSONDecodeError):
-        logger.warning("Article ranking failed to parse LLM response, using default order")
-        return list(range(min(max_articles, len(articles))))
+        logger.warning("Article ranking failed to parse LLM response, skipping articles")
+        return []
 
 
 def generate_podcast_script(
