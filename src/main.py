@@ -13,7 +13,6 @@ from fileio.progress import console
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 LLM_CONFIG_PATH = str(_PROJECT_ROOT / "config.yaml")
-INTEREST_PATH = str(_PROJECT_ROOT / "interest.md")
 PODCAST_CONFIG_PATH = str(_PROJECT_ROOT / "podcast_config.yaml")
 DEFAULT_OUTPUT_DIR = str(_PROJECT_ROOT / "output")
 DEFAULT_LLM_MODEL = "llama3.1:8b"
@@ -26,15 +25,6 @@ def derive_output_dir(source_path):
     else:
         name = os.path.splitext(os.path.basename(source_path))[0]
     return os.path.join(DEFAULT_OUTPUT_DIR, name)
-
-
-def load_interests():
-    """Load interest.md if it exists."""
-    if os.path.isfile(INTEREST_PATH):
-        with open(INTEREST_PATH, encoding="utf-8") as f:
-            text = f.read().strip()
-            return text or None
-    return None
 
 
 def load_podcast_config():

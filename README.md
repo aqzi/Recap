@@ -23,7 +23,7 @@ export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Config files (`config.yaml`, `interest.md`, `podcast_config.yaml`) and output directories (`output/`, `data/`) are resolved relative to the project root, so the tool works correctly regardless of which directory you run it from.
+Config files (`config.yaml`, `podcast_config.yaml`) and output directories (`output/`, `data/`) are resolved relative to the project root, so the tool works correctly regardless of which directory you run it from.
 
 ## Modes
 
@@ -72,9 +72,7 @@ python src/main.py --podcast ./notes/ --output-language fr
 
 Generates a podcast script from input text and converts it to audio. Can optionally enrich with articles from RSS feeds and web search.
 
-Output: `output/podcast_<date>/podcast.wav`, `script.md`, `sources.md`
-
-Requires `interest.md` — see below.
+Output: `output/podcast_<name>/podcast.wav`, `script.md`, `sources.md`
 
 ### 3. Record audio
 
@@ -202,15 +200,6 @@ Your output language preference is also saved here (as `output_language`). Set i
 python src/main.py meeting.mp3 --llm-model gpt-4o
 python src/main.py meeting.mp3 --llm-model claude-sonnet-4-6
 python src/main.py meeting.mp3 --llm-model mistral:7b
-```
-
-### `interest.md`
-
-Personalizes podcast content. Create in the project root:
-
-```markdown
-I'm interested in AI/ML engineering, startup strategy, and Python tooling.
-I don't care about marketing or social media growth.
 ```
 
 ### `podcast_config.yaml`

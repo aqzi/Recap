@@ -9,7 +9,6 @@ def generate_podcast(
     config: dict,
     llm_model: str,
     progress,
-    interests: str | None = None,
     source_files: list[str] | None = None,
     kb=None,
     output_language: str = "en",
@@ -18,7 +17,6 @@ def generate_podcast(
 
     Args:
         input_text: Primary source material for the podcast.
-        interests: Optional listener interests (from interest.md).
         source_files: List of input file paths for the sources markdown.
         kb: Optional KnowledgeBase instance for RAG context.
 
@@ -76,7 +74,6 @@ def generate_podcast(
     script = generate_podcast_script(
         input_text, style, target_length, llm_model,
         articles=selected or None,
-        interests=interests,
         kb_context=script_kb,
         output_language=output_language,
     )

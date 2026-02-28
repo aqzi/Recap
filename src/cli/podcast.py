@@ -13,7 +13,7 @@ def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False
     from podcast.scriptwriter import generate_podcast, write_podcast_output
     from podcast.tts import get_tts_engine
 
-    from main import load_interests, load_podcast_config
+    from main import load_podcast_config
 
     # Load primary input text
     try:
@@ -21,9 +21,6 @@ def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False
     except ValueError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
-
-    # Interests are optional — used to guide tone if available
-    interests = load_interests()
 
     config = load_podcast_config()
     style = config.get("podcast", {}).get("style", "solo")
@@ -60,8 +57,6 @@ def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False
         console.print(f"  Enrich:   {', '.join(parts)}")
     else:
         console.print("  Enrich:   none")
-    if interests:
-        console.print("  Interests: loaded")
     if kb_dir:
         console.print(f"  KB:       {kb_dir}")
     console.print(f"  Output:   {output_dir}")
@@ -80,7 +75,6 @@ def run_podcast(input_path, output_dir, llm_model, kb_dir=None, kb_rebuild=False
             try:
                 script, sources_md = generate_podcast(
                     input_text, config, llm_model, progress,
-                    interests=interests,
                     source_files=source_files,
                     kb=kb,
                     output_language=output_language,

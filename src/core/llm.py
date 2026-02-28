@@ -144,7 +144,6 @@ def rank_articles(
 def generate_podcast_script(
     input_text: str, style: str, target_length: str, llm_model: str,
     articles: list[dict] | None = None,
-    interests: str | None = None,
     kb_context: str | None = None,
     output_language: str = "en",
 ) -> str:
@@ -152,14 +151,14 @@ def generate_podcast_script(
     if style == "two_host":
         prompt = two_host_script_prompt(
             input_text, target_length,
-            articles=articles, interests=interests, kb_context=kb_context,
+            articles=articles, kb_context=kb_context,
         )
         system = two_host_script_system(output_language=output_language)
         return call_llm(prompt, system, llm_model, num_ctx=16384, timeout=300)
     else:
         prompt = solo_script_prompt(
             input_text, target_length,
-            articles=articles, interests=interests, kb_context=kb_context,
+            articles=articles, kb_context=kb_context,
         )
         system = solo_script_system(output_language=output_language)
         return call_llm(prompt, system, llm_model, num_ctx=16384, timeout=300)

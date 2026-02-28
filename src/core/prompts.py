@@ -207,7 +207,6 @@ natural spoken paragraphs. Spell out abbreviations and symbols where needed \
 def solo_script_prompt(
     input_text: str, target_length: str,
     articles: list[dict] | None = None,
-    interests: str | None = None,
     kb_context: str | None = None,
 ) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
@@ -223,7 +222,6 @@ def solo_script_prompt(
     combined_material = "\n\n---\n\n".join(material_parts)
 
     kb_section = _kb_context_block(kb_context) if kb_context else ""
-    interests_section = f"\nLISTENER INTERESTS (guide tone and emphasis):\n{interests}" if interests else ""
 
     return f"""\
 Write a podcast script (~{word_target} words).
@@ -239,7 +237,7 @@ within the point you are already making.
 
 SOURCE MATERIAL:
 {combined_material}
-{interests_section}{kb_section}
+{kb_section}
 
 Output ONLY the spoken script. No title, no headers, no labels. Start directly with \
 the host speaking. Plain spoken paragraphs only, no markdown, no special symbols, no lists."""
@@ -264,7 +262,6 @@ natural spoken dialogue. Spell out abbreviations and symbols where needed \
 def two_host_script_prompt(
     input_text: str, target_length: str,
     articles: list[dict] | None = None,
-    interests: str | None = None,
     kb_context: str | None = None,
 ) -> str:
     word_target = LENGTH_WORD_TARGETS.get(target_length, 900)
@@ -280,7 +277,6 @@ def two_host_script_prompt(
     combined_material = "\n\n---\n\n".join(material_parts)
 
     kb_section = _kb_context_block(kb_context) if kb_context else ""
-    interests_section = f"\nLISTENER INTERESTS (guide tone and emphasis):\n{interests}" if interests else ""
 
     return f"""\
 Write a two-host podcast script (~{word_target} words).
@@ -296,7 +292,7 @@ within the point being discussed.
 
 SOURCE MATERIAL:
 {combined_material}
-{interests_section}{kb_section}
+{kb_section}
 
 Output ONLY the spoken dialogue. No title, no headers, no labels. Start directly with \
 ALEX speaking. Every line MUST start with "ALEX:" or "SAM:". \
