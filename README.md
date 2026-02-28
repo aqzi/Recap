@@ -7,7 +7,6 @@ A CLI tool that summarizes audio, text files, or entire directories, records fro
 - Python 3.10+
 - [Ollama](https://ollama.com/) for local models, or an API key for a cloud provider (OpenAI, Anthropic, etc.)
 - ffmpeg
-- TTS engine for podcast audio: macOS `say` (built-in, zero setup) or [Piper TTS](https://github.com/rhasspy/piper)
 
 ## Setup
 
